@@ -1,0 +1,39 @@
+/* ===== DJ 音乐电台 — 统一设计规范 ===== */
+:root {
+  /* 主色调 */
+  --color-bg: #0a0a14;
+  --color-surface: #141428;
+  --color-surface-hover: #1e1e3a;
+  --color-border: #2a2a4a;
+  --color-border-light: #3a3a5a;
+
+  /* 强调色 */
+  --color-primary: #e94560;
+  --color-primary-glow: rgba(233, 69, 96, 0.3);
+  --color-accent: #f5a623;
+  --color-success: #4ecca3;
+  --color-info: #0f9bff;
+
+  /* 文字 */
+  --color-text: #e0e0e0;
+  --color-text-muted: #8888aa;
+  --color-text-dim: #555577;
+
+  /* 圆角 */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  /* 间距 */
+  --gap-xs: 6px;
+  --gap-sm: 12px;
+  --gap-md: 20px;
+  --gap-lg: 32px;
+
+  /* 阴影 */
+  --shadow-panel: 0 4px 24px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 0 20px var(--color-primary-glow);
+
+  /* 字体 */
+  --font-mono: 'SF Mono', 'Fira Code', monospace;
+}

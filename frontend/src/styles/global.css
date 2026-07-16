@@ -1,0 +1,57 @@
+@import './variables.css';
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+               'Microsoft YaHei', sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  overflow: hidden;
+  height: 100vh;
+}
+
+#app { height: 100vh; }
+
+/* ===== 统一面板样式（所有队员复用） ===== */
+.panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--gap-md);
+  box-shadow: var(--shadow-panel);
+}
+
+.panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: var(--gap-sm);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.panel-title .dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--color-success);
+}
+
+/* ===== 统一按钮 ===== */
+.btn-primary {
+  padding: 8px 20px;
+  border: none; border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--color-primary), #c0392b);
+  color: #fff; font-size: 13px; cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-primary:hover { box-shadow: var(--shadow-glow); transform: translateY(-1px); }
+
+/* ===== 统一滚动条 ===== */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-border-light); }

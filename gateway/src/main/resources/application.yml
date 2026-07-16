@@ -9,6 +9,10 @@ spring:
     nacos:
       discovery:
         server-addr: localhost:8848
+      config:
+        import-check:
+          enabled: false
+        enabled: false
     gateway:
       discovery:
         locator:
