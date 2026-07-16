@@ -1,0 +1,30 @@
+### Java ###
+target/
+*.class
+*.jar
+*.war
+*.log
+
+### Maven ###
+.mvn/
+!.mvn/wrapper/maven-wrapper.jar
+
+### IntelliJ IDEA ###
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+### Mac ###
+.DS_Store
+.AppleDouble
+.LSOverride
+
+### Node.js ###
+node_modules/
+dist/
+.env.local
+
+### Docker ###
+.env
