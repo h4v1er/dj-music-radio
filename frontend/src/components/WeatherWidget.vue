@@ -4,17 +4,32 @@
  * 功能: 实时天气 + 时段感知DJ欢迎语
  * 后端: module-chat (:8081) 调用和风天气API
  */
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
+import { chatApi } from '../api/chat'
 
-// TODO: 队员A 实现天气API调用
-const weather = ref({ icon: '☀️', temp: '28°', city: '北京' })
-const greeting = ref('下午好 ☀️')
+const weather = ref({ icon: '☀️', temp: '28°', city: '北京', text: '晴' })
+const greeting = ref('下午好，想听点什么？')
+
+onMounted(async () => {
+  try {
+    const res = await chatApi.weather('北京')
+    weather.value = {
+      icon: res.data.icon,
+      temp: res.data.temp,
+      city: res.data.city,
+      text: res.data.text
+    }
+    greeting.value = res.data.greeting
+  } catch (e) {
+    greeting.value = 'DJ 天气服务待连接'
+  }
+})
 </script>
 
 <template>
   <div class="weather">
     <span class="greeting">{{ greeting }}</span>
-    <span class="info">{{ weather.icon }} {{ weather.temp }} {{ weather.city }}</span>
+    <span class="info">{{ weather.icon }} {{ weather.temp }} {{ weather.city }} {{ weather.text }}</span>
   </div>
 </template>
 
