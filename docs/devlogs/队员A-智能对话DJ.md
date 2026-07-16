@@ -42,3 +42,9 @@
 
 ## 第4天（日期：______）
 - [ ] 
+
+
+## 2026-07-16 补充记录
+- [x] 新增 `MusicRecommendationClient` 和 `RecRecommendationClient`，通过 OpenFeign 预接入 module-music/module-rec 推荐能力
+- [x] `ChatService` 优先调用远程推荐接口，队友接口未完成或不可用时自动降级到本地 3 首歌曲推荐
+- [x] 验证通过：`module-chat -am package -DskipTests`、启动 8081、Gateway `/chat/send` 返回推荐列表、`/chat/history` 可查询消息
