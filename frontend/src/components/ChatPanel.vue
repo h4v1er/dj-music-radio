@@ -5,6 +5,7 @@
  * 后端: module-chat (:8081)
  */
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { Connection, Headset, Promotion, User } from '@element-plus/icons-vue'
 import { chatApi } from '../api/chat'
 
 const USER_ID = 1
@@ -168,27 +169,50 @@ async function scrollToBottom() {
 
 <template>
   <div class="panel chat-panel">
-    <div class="panel-title">
-      <span class="dot" :style="{ background: connected ? 'var(--color-success)' : '#666' }"></span>
-      AI 对话 DJ
+    <div class="chat-header">
+      <div class="title-group">
+        <span class="dot" :style="{ background: connected ? 'var(--color-success)' : '#666' }"></span>
+        <div>
+          <span class="panel-kicker">AI 对话 DJ</span>
+          <strong>智能音乐助手</strong>
+        </div>
+      </div>
+      <span :class="['status-pill', connected ? 'online' : 'offline']">
+        <el-icon><Connection /></el-icon>
+        {{ connected ? '实时' : '离线' }}
+      </span>
     </div>
 
     <!-- 消息区 -->
     <div ref="messagesRef" class="messages">
-      <div v-for="(m, i) in messages" :key="i"
-           :class="['msg', m.role]">
-        <span v-if="m.role === 'dj'" class="role">🎧 DJ</span>
-        <span v-else class="role">👤 你</span>
-        <p>{{ m.text }}</p>
+      <div v-for="(m, i) in messages" :key="i" :class="['msg-row', m.role]">
+        <div class="avatar">
+          <el-icon v-if="m.role === 'dj'"><Headset /></el-icon>
+          <el-icon v-else><User /></el-icon>
+        </div>
+        <div class="bubble">
+          <div class="msg-meta">
+            <span>{{ m.role === 'dj' ? 'DJ' : '你' }}</span>
+            <time v-if="m.time">{{ m.time }}</time>
+          </div>
+          <p>{{ m.text }}</p>
+        </div>
       </div>
     </div>
 
     <!-- 输入区 -->
     <div class="input-row">
-      <el-input v-model="input" placeholder="说点什么..." @keyup.enter="send"
-                size="small" :disabled="sending" :dark="true" />
-      <button class="btn-primary" :disabled="sending" @click="send">
-        {{ sending ? '发送中' : '发送' }}
+      <el-input
+        v-model="input"
+        type="textarea"
+        resize="none"
+        :autosize="{ minRows: 1, maxRows: 3 }"
+        placeholder="输入想听的风格或心情"
+        :disabled="sending"
+        @keydown.enter.exact.prevent="send"
+      />
+      <button class="send-btn" :disabled="sending" title="发送" @click="send">
+        <el-icon><Promotion /></el-icon>
       </button>
     </div>
   </div>
@@ -196,30 +220,221 @@ async function scrollToBottom() {
 
 <style scoped>
 .chat-panel {
-  display: flex; flex-direction: column; overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  gap: 14px;
+  padding: 18px;
 }
+
+.chat-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.title-group .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  box-shadow: 0 0 12px rgba(78, 204, 163, 0.45);
+}
+
+.title-group div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.panel-kicker {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.title-group strong {
+  color: var(--color-text);
+  font-size: 15px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.status-pill {
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  background: rgba(10, 10, 20, 0.72);
+  font-size: 11px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.status-pill.online {
+  color: var(--color-success);
+  border-color: rgba(78, 204, 163, 0.28);
+}
+
+.status-pill.offline {
+  color: var(--color-text-dim);
+}
+
 .messages {
-  flex: 1; overflow-y: auto; padding: var(--gap-xs) 0;
-  display: flex; flex-direction: column; gap: 10px;
+  flex: 1;
+  overflow-y: auto;
+  padding: 2px 2px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   min-height: 0;
 }
-.msg { padding: 8px 12px; border-radius: var(--radius-sm); font-size: 13px; }
-.msg.dj { background: rgba(233, 69, 96, 0.1); border-left: 2px solid var(--color-primary); }
-.msg.user { background: rgba(15, 155, 255, 0.1); border-left: 2px solid var(--color-info); }
-.msg p { margin-top: 4px; line-height: 1.5; white-space: pre-line; }
-.role { font-size: 11px; color: var(--color-text-muted); }
+
+.msg-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.msg-row.user {
+  flex-direction: row-reverse;
+}
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  color: var(--color-primary);
+  background: rgba(233, 69, 96, 0.12);
+  border: 1px solid rgba(233, 69, 96, 0.25);
+}
+
+.msg-row.user .avatar {
+  color: var(--color-info);
+  background: rgba(15, 155, 255, 0.12);
+  border-color: rgba(15, 155, 255, 0.26);
+}
+
+.bubble {
+  max-width: calc(100% - 44px);
+  padding: 10px 12px;
+  border-radius: 12px 12px 12px 4px;
+  background: rgba(233, 69, 96, 0.11);
+  border: 1px solid rgba(233, 69, 96, 0.2);
+  color: var(--color-text);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
+}
+
+.msg-row.user .bubble {
+  border-radius: 12px 12px 4px 12px;
+  background: rgba(15, 155, 255, 0.13);
+  border-color: rgba(15, 155, 255, 0.24);
+}
+
+.msg-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.msg-meta span {
+  font-weight: 700;
+}
+
+.msg-meta time {
+  color: var(--color-text-dim);
+  white-space: nowrap;
+}
+
+.bubble p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
 
 .input-row {
-  display: flex; gap: var(--gap-xs); margin-top: var(--gap-sm);
-  padding-top: var(--gap-xs); border-top: 1px solid var(--color-border);
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
 }
-.input-row :deep(.el-input__inner) {
-  background: var(--color-bg); border-color: var(--color-border); color: var(--color-text);
+
+.input-row :deep(.el-textarea__inner) {
+  min-height: 42px !important;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border-color: var(--color-border);
+  background: rgba(10, 10, 20, 0.78);
+  color: var(--color-text);
+  line-height: 1.45;
+  box-shadow: none;
 }
-.btn-primary:disabled {
+
+.input-row :deep(.el-textarea__inner:focus) {
+  border-color: var(--color-info);
+  box-shadow: 0 0 0 2px rgba(15, 155, 255, 0.12);
+}
+
+.send-btn {
+  width: 42px;
+  height: 42px;
+  border: none;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 42px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--color-primary), #d83a32);
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+}
+
+.send-btn:hover {
+  box-shadow: var(--shadow-glow);
+  transform: translateY(-1px);
+}
+
+.send-btn .el-icon {
+  font-size: 18px;
+}
+
+.send-btn:disabled {
   cursor: not-allowed;
   opacity: 0.6;
   transform: none;
   box-shadow: none;
+}
+
+@media (max-width: 1000px) {
+  .chat-panel {
+    min-height: 520px;
+  }
 }
 </style>
