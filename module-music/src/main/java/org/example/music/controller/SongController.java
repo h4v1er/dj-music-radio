@@ -86,6 +86,9 @@ public class SongController {
         SongEmotion se = emotionAnalysisService.analyzeSong(id);
         if (se == null) return Result.fail(500, "分析失败");
 
+        // 重新获取歌曲以拿到更新后的 emotionTags
+        Song updatedSong = songMapper.selectById(id);
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("songId", id);
         result.put("primaryEmotion", se.getPrimaryEmotion());
@@ -93,7 +96,7 @@ public class SongController {
         result.put("valence", se.getValence());
         result.put("arousal", se.getArousal());
         result.put("emotionIntensity", se.getEmotionIntensity());
-        result.put("emotionTags", song.getEmotionTags());
+        result.put("emotionTags", updatedSong != null ? updatedSong.getEmotionTags() : "");
         result.put("analyzed", true);
         return Result.ok(result);
     }
