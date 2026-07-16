@@ -6,7 +6,7 @@ spring:
   application:
     name: module-user
   datasource:
-    url: jdbc:mysql://localhost:3306/mall?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=utf-8
+    url: jdbc:mysql://localhost:3306/dj_music_user?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=utf-8&connectTimeout=5000&socketTimeout=30000
     username: root
     password:
     driver-class-name: com.mysql.cj.jdbc.Driver

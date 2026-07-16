@@ -1,13 +1,31 @@
-// ===== 队员D — 用户服务 =====
-import api from './index'
+import request from './index'
 
 export const userApi = {
-  hello: () => api.get('/user/hello'),
-  register: (data) => api.post('/user/register', data),
-  login: (data) => api.post('/user/login', data),
-  getUserInfo: () => api.get('/user/info'),
-  updateUserInfo: (data) => api.put('/user/info', data),
-  addFavorite: (songId) => api.post('/user/favorite/add', { songId }),
-  removeFavorite: (songId) => api.delete(`/user/favorite/${songId}`),
-  history: () => api.get('/user/history')
+  login(data) {
+    return request({ url: '/user/login', method: 'post', data })
+  },
+  register(data) {
+    return request({ url: '/user/register', method: 'post', data })
+  },
+  info() {
+    return request({ url: '/user/info', method: 'get', headers: { Authorization: localStorage.getItem('token') || '' } })
+  },
+  updateInfo(data) {
+    return request({ url: '/user/info', method: 'put', data, headers: { Authorization: localStorage.getItem('token') || '' } })
+  },
+  addFavorite(songId) {
+    return request({ url: `/user/favorite/add?songId=${songId}`, method: 'post', headers: { Authorization: localStorage.getItem('token') || '' } })
+  },
+  removeFavorite(songId) {
+    return request({ url: `/user/favorite/${songId}`, method: 'delete', headers: { Authorization: localStorage.getItem('token') || '' } })
+  },
+  favoriteList() {
+    return request({ url: '/user/favorite/list', method: 'get', headers: { Authorization: localStorage.getItem('token') || '' } })
+  },
+  history() {
+    return request({ url: '/user/history', method: 'get', headers: { Authorization: localStorage.getItem('token') || '' } })
+  },
+  hello() {
+    return request({ url: '/user/hello', method: 'get' })
+  }
 }
