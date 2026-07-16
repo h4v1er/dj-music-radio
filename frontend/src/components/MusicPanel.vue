@@ -58,7 +58,41 @@ const tabLabel = computed(() => {
 })
 
 // ── 播放逻辑 ──
-function playSong(song) {
+async function playSong(song) {
+  // 网易云歌曲（导入歌单/搜索结果），无本地文件时需获取在线播放URL + 歌词
+  if ((song.source === 'NETEASE' || song._netease) && !song.filePath) {
+    try {
+      const neteaseId = song.sourceId || song.id
+      const [urlRes, lyricRes] = await Promise.all([
+        api.neteaseUrl(neteaseId),
+        api.neteaseLyric(neteaseId)
+      ])
+      // 设置播放URL
+      const urlData = urlRes.data?.data
+      if (urlData && urlData.length > 0 && urlData[0].url) {
+        song.filePath = urlData[0].url
+      }
+      // 设置歌词
+      const lyricData = lyricRes.data?.data
+      if (lyricData?.lrc?.lyric) {
+        song.lyric = lyricData.lrc.lyric
+      }
+      // 补封面（导入时可能为空）
+      if (!song.coverUrl && song.sourceId) {
+        try {
+          const detailRes = await api.neteaseDetail(String(song.sourceId))
+          const detailSongs = detailRes.data?.data || []
+          if (detailSongs.length > 0) {
+            const picUrl = (detailSongs[0].al || {}).picUrl || ''
+            song.coverUrl = picUrl.startsWith('http://') ? picUrl.replace('http://', 'https://') : picUrl
+          }
+        } catch (e) { /* ignore */ }
+      }
+    } catch (e) {
+      console.error('获取网易云播放URL失败', e)
+    }
+  }
+
   currentSong.value = song
   // 记录播放历史
   api.recordPlay(song.id).catch(() => {})
@@ -70,7 +104,7 @@ function playSong(song) {
   }
 }
 
-function playNext() {
+async function playNext() {
   if (playQueue.value.length === 0) return
   const idx = playQueue.value.findIndex(s => s.id === currentSong.value?.id)
   let nextIdx
@@ -83,16 +117,16 @@ function playNext() {
   } else {
     nextIdx = 0 // 循环到开头
   }
-  playSong(playQueue.value[nextIdx])
+  await playSong(playQueue.value[nextIdx])
 }
 
-function playPrev() {
+async function playPrev() {
   if (playQueue.value.length === 0) return
   const idx = playQueue.value.findIndex(s => s.id === currentSong.value?.id)
   if (idx > 0) {
-    playSong(playQueue.value[idx - 1])
+    await playSong(playQueue.value[idx - 1])
   } else {
-    playSong(playQueue.value[playQueue.value.length - 1])
+    await playSong(playQueue.value[playQueue.value.length - 1])
   }
 }
 

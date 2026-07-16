@@ -56,6 +56,7 @@ export default {
   neteaseDetail: (ids) => musicApi.get('/netease/detail', { params: { ids } }),
   neteaseLyric: (id) => musicApi.get('/netease/lyric', { params: { id } }),
   neteasePing: () => musicApi.get('/netease/ping'),
+  neteasePlaylist: (id) => musicApi.get('/netease/playlist', { params: { id } }),
 
   // ── 健康检查 ──
   hello: () => musicApi.get('/hello')

@@ -9,6 +9,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -52,6 +55,75 @@ public class NeteaseController {
         String url = NETEASE_API + "/lyric?id=" + id;
         Map resp = rest.getForObject(url, Map.class);
         return Result.ok(resp != null ? resp : null);
+    }
+
+    /**
+     * 获取网易云歌单详情（含歌曲列表 + 封面）
+     * 前端请求：/music/netease/playlist?id=12345678
+     */
+    @GetMapping("/playlist")
+    public Result<Object> getPlaylist(@RequestParam String id) {
+        try {
+            // 获取歌单基本信息 + 歌曲列表
+            String url = NETEASE_API + "/playlist/detail?id=" + id;
+            Map resp = rest.getForObject(url, Map.class);
+            if (resp == null || resp.get("playlist") == null) {
+                return Result.fail("歌单不存在或无法访问");
+            }
+            Map playlist = (Map) resp.get("playlist");
+            // 实际 API 返回结构: { playlist: { name, coverImgUrl, tracks, tags, ... }, privileges: [...] }
+            // 歌曲列表在 playlist.tracks 中
+            List<Map> songs = (List<Map>) playlist.get("tracks");
+
+            // 精简返回数据
+            Map<String, Object> result = new java.util.LinkedHashMap<>();
+            result.put("id", playlist.get("id"));
+            result.put("name", playlist.get("name"));
+            result.put("coverImgUrl", playlist.get("coverImgUrl"));
+            result.put("trackCount", playlist.get("trackCount"));
+            result.put("tags", playlist.get("tags"));   // 风格标签，如 [\"华语\", \"摇滚\"]
+
+            // 从歌单标签推断流派，用于导入时标注歌曲风格
+            List<String> playlistTags = (List<String>) playlist.get("tags");
+            String genreHint = (playlistTags != null && !playlistTags.isEmpty())
+                ? String.join("/", playlistTags) : "网易云";
+
+            if (songs != null) {
+                List<Map<String, Object>> songList = new java.util.ArrayList<>();
+                for (Map s : songs) {
+                    Map<String, Object> song = new java.util.LinkedHashMap<>();
+                    song.put("id", s.get("id"));
+                    song.put("name", s.get("name"));
+                    song.put("duration", s.get("dt") != null ? (int) s.get("dt") / 1000 : 0);
+                    song.put("genre", genreHint);  // 继承歌单风格标签
+
+                    // 歌手
+                    List<Map> ar = (List<Map>) s.get("ar");
+                    if (ar != null && !ar.isEmpty()) {
+                        song.put("artist", ar.get(0).get("name"));
+                    } else {
+                        song.put("artist", "未知歌手");
+                    }
+
+                    // 专辑 + 封面
+                    Map al = (Map) s.get("al");
+                    if (al != null) {
+                        song.put("album", al.get("name"));
+                        song.put("coverUrl", al.get("picUrl"));
+                    } else {
+                        song.put("album", "");
+                        song.put("coverUrl", "");
+                    }
+
+                    songList.add(song);
+                }
+                result.put("songs", songList);
+            }
+
+            return Result.ok(result);
+        } catch (Exception e) {
+            return Result.fail("获取歌单失败: " + e.getMessage());
+        }
     }
 
     /**
