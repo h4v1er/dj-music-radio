@@ -48,3 +48,7 @@
 - [x] 新增 `MusicRecommendationClient` 和 `RecRecommendationClient`，通过 OpenFeign 预接入 module-music/module-rec 推荐能力
 - [x] `ChatService` 优先调用远程推荐接口，队友接口未完成或不可用时自动降级到本地 3 首歌曲推荐
 - [x] 验证通过：`module-chat -am package -DskipTests`、启动 8081、Gateway `/chat/send` 返回推荐列表、`/chat/history` 可查询消息
+- [x] 新增 `DeepSeekChatClient`，复用 DeepSeek OpenAI 兼容接口，对用户消息做意图解析（情绪、场景、曲风、歌手、搜索关键词、是否需要推荐）
+- [x] `ChatService` 改为 AI 意图解析 → 调用 music/rec 获取真实歌曲 → AI 生成 DJ 回复；无 DeepSeek key 或调用失败时保留原规则兜底
+- [x] `module-chat` 新增 `DEEPSEEK_API_KEY` / `DEEPSEEK_API_URL` / `DEEPSEEK_MODEL` 环境变量配置，避免把 key 继续写入新模块配置
+- [x] 验证通过：`module-chat -am package -DskipTests`；Gateway `/chat/send` 音乐意图请求返回 3 首歌，普通问候返回 `songs=[]`

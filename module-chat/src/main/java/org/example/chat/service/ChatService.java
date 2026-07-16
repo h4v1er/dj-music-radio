@@ -32,15 +32,18 @@ public class ChatService {
     private final ChatHistoryMapper chatHistoryMapper;
     private final MusicRecommendationClient musicRecommendationClient;
     private final RecRecommendationClient recRecommendationClient;
+    private final DeepSeekChatClient deepSeekChatClient;
     private volatile long dbRetryAfter;
 
     public ChatService(
             ChatHistoryMapper chatHistoryMapper,
             MusicRecommendationClient musicRecommendationClient,
-            RecRecommendationClient recRecommendationClient) {
+            RecRecommendationClient recRecommendationClient,
+            DeepSeekChatClient deepSeekChatClient) {
         this.chatHistoryMapper = chatHistoryMapper;
         this.musicRecommendationClient = musicRecommendationClient;
         this.recRecommendationClient = recRecommendationClient;
+        this.deepSeekChatClient = deepSeekChatClient;
     }
 
     public ChatSendResponse send(ChatSendRequest request) {
@@ -48,8 +51,13 @@ public class ChatService {
         long userId = safeRequest.userId() == null ? DEFAULT_USER_ID : safeRequest.userId();
         String content = normalize(safeRequest.content());
         ChatMessage userMessage = new ChatMessage("user", content, now());
-        ChatMessage reply = new ChatMessage("dj", buildReply(content), now());
-        List<String> songs = recommendSongs(userId, content);
+        DeepSeekChatClient.ChatIntent intent = deepSeekChatClient.analyzeIntent(content);
+        List<String> songs = recommendSongs(userId, content, intent);
+        String replyText = deepSeekChatClient.composeReply(content, intent, songs);
+        if (replyText.isBlank()) {
+            replyText = buildReply(content, intent);
+        }
+        ChatMessage reply = new ChatMessage("dj", replyText, now());
 
         appendHistory(userId, userMessage);
         appendHistory(userId, reply);
@@ -135,7 +143,14 @@ public class ChatService {
         return "assistant".equals(role) ? "dj" : "user";
     }
 
-    private static String buildReply(String content) {
+    private static String buildReply(String content, DeepSeekChatClient.ChatIntent intent) {
+        if (intent != null && intent.hasMeaningfulTags()) {
+            String brief = intent.brief();
+            if (!brief.isBlank() && !brief.equals(content)) {
+                return "我听懂了，先按「" + brief + "」这个方向给你挑几首，节奏会尽量贴合你的状态。";
+            }
+        }
+
         String lower = content.toLowerCase(Locale.ROOT);
         if (containsAny(lower, "摇滚", "rock")) {
             return "收到，给你切到摇滚模式。先来三首有力量感的歌，把节奏拉起来。";
@@ -152,20 +167,23 @@ public class ChatService {
         return "我记下了。现在先按你的描述做一组音乐推荐，后面会继续根据播放和收藏调整。";
     }
 
-    private List<String> recommendSongs(long userId, String content) {
-        List<String> remoteSongs = remoteRecommendSongs(userId, content);
+    private List<String> recommendSongs(long userId, String content, DeepSeekChatClient.ChatIntent intent) {
+        if (intent != null && !intent.needRecommend()) {
+            return List.of();
+        }
+        List<String> remoteSongs = remoteRecommendSongs(userId, content, intent);
         if (!remoteSongs.isEmpty()) {
             return remoteSongs;
         }
-        return localRecommendSongs(content);
+        return localRecommendSongs(intent == null ? content : intent.searchKeyword(content));
     }
 
-    private List<String> remoteRecommendSongs(long userId, String content) {
+    private List<String> remoteRecommendSongs(long userId, String content, DeepSeekChatClient.ChatIntent intent) {
         try {
-            if (containsAny(content, "推荐", "随便", "不知道")) {
+            if (shouldUseDailyRecommend(content, intent)) {
                 return extractSongNames(recRecommendationClient.daily(userId));
             }
-            return extractSongNames(musicRecommendationClient.searchSongs(searchKeyword(content)));
+            return extractSongNames(musicRecommendationClient.searchSongs(searchKeyword(content, intent)));
         } catch (Exception e) {
             return List.of();
         }
@@ -185,7 +203,18 @@ public class ChatService {
         return List.of("今日开场 - DJ Radio", "晴天漫游 - Sample Artist", "低速公路 - Demo Band");
     }
 
-    private static String searchKeyword(String content) {
+    private static boolean shouldUseDailyRecommend(String content, DeepSeekChatClient.ChatIntent intent) {
+        String lower = content.toLowerCase(Locale.ROOT);
+        if (containsAny(lower, "推荐", "随便", "不知道", "今日", "daily")) {
+            return intent == null || !intent.hasSpecificMusicRequest();
+        }
+        return false;
+    }
+
+    private static String searchKeyword(String content, DeepSeekChatClient.ChatIntent intent) {
+        if (intent != null) {
+            return intent.searchKeyword(content);
+        }
         if (containsAny(content.toLowerCase(Locale.ROOT), "摇滚", "rock")) {
             return "摇滚";
         }
