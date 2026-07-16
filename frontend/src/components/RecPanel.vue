@@ -5,7 +5,7 @@
  * 后端: module-rec (:8083)  Redis + RabbitMQ
  */
 import { ref, onMounted } from 'vue'
-import { recApi } from '../api'
+import { recApi } from '../api/rec'
 
 const connected = ref(false)
 const hotSongs = ref([

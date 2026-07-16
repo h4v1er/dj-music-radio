@@ -5,7 +5,7 @@
  * 后端: module-user (:8084)  Redis + JWT
  */
 import { ref, onMounted } from 'vue'
-import { userApi } from '../api'
+import { userApi } from '../api/user'
 
 const connected = ref(false)
 const loggedIn = ref(false)

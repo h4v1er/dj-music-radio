@@ -5,7 +5,7 @@
  * 后端: module-chat (:8081)
  */
 import { ref, onMounted } from 'vue'
-import { chatApi } from '../api'
+import { chatApi } from '../api/chat'
 
 const connected = ref(false)
 const input = ref('')

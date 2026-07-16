@@ -5,7 +5,7 @@
  * 后端: module-music (:8082)  MySQL + RabbitMQ
  */
 import { ref, onMounted } from 'vue'
-import { musicApi } from '../api'
+import { musicApi } from '../api/music'
 
 const connected = ref(false)
 const playing = ref(false)
