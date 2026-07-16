@@ -33,6 +33,7 @@ public class ChatService {
     private final ChatHistoryMapper chatHistoryMapper;
     private final MusicRecommendationClient musicRecommendationClient;
     private final RecRecommendationClient recRecommendationClient;
+    private final WeatherService weatherService;
     private final DeepSeekChatClient deepSeekChatClient;
     private volatile long dbRetryAfter;
 
@@ -40,10 +41,12 @@ public class ChatService {
             ChatHistoryMapper chatHistoryMapper,
             MusicRecommendationClient musicRecommendationClient,
             RecRecommendationClient recRecommendationClient,
+            WeatherService weatherService,
             DeepSeekChatClient deepSeekChatClient) {
         this.chatHistoryMapper = chatHistoryMapper;
         this.musicRecommendationClient = musicRecommendationClient;
         this.recRecommendationClient = recRecommendationClient;
+        this.weatherService = weatherService;
         this.deepSeekChatClient = deepSeekChatClient;
     }
 
@@ -55,23 +58,29 @@ public class ChatService {
         ChatMessage userMessage = new ChatMessage("user", content, now());
 
         DeepSeekChatClient.ToolPlan plan = deepSeekChatClient.planToolUse(content, recentHistory);
-        List<SongCandidate> candidates = executeTools(userId, content, plan);
-        DeepSeekChatClient.AiReply aiReply = deepSeekChatClient.composeReply(content, plan, candidates, recentHistory);
+        ToolExecution execution = executeTools(userId, content, plan);
+        DeepSeekChatClient.AiReply aiReply = deepSeekChatClient.composeReply(
+                content,
+                plan,
+                execution.toolResults(),
+                execution.candidates(),
+                recentHistory
+        );
 
         List<String> songs = aiReply.songs();
-        if (songs.isEmpty() && plan.needTools() && !candidates.isEmpty() && aiReply.reply().isBlank()) {
-            songs = candidates.stream().limit(3).map(SongCandidate::label).toList();
+        if (songs.isEmpty() && plansMusicTools(plan) && !execution.candidates().isEmpty() && aiReply.reply().isBlank()) {
+            songs = execution.candidates().stream().limit(3).map(SongCandidate::label).toList();
         }
         String replyText = aiReply.reply();
         if (replyText.isBlank()) {
-            replyText = buildFallbackReply(content, plan, candidates);
+            replyText = buildFallbackReply(content, plan, execution);
         }
 
         ChatMessage reply = new ChatMessage("dj", replyText, now());
         appendHistory(userId, userMessage);
         appendHistory(userId, reply);
 
-        return new ChatSendResponse(reply, songs);
+        return new ChatSendResponse(reply, songs, execution.toolResults());
     }
 
     public List<ChatMessage> history(Long userId) {
@@ -99,72 +108,161 @@ public class ChatService {
         return new ArrayList<>(history);
     }
 
-    private List<SongCandidate> executeTools(long userId, String content, DeepSeekChatClient.ToolPlan plan) {
+    private ToolExecution executeTools(long userId, String content, DeepSeekChatClient.ToolPlan plan) {
         if (plan == null || !plan.needTools()) {
-            return List.of();
+            return new ToolExecution(List.of(), List.of());
         }
 
         Map<String, SongCandidate> candidates = new LinkedHashMap<>();
-        List<String> tools = plan.tools().isEmpty() ? List.of("music.list") : plan.tools();
-        for (String tool : tools) {
-            if (candidates.size() >= MAX_CANDIDATE_SONGS) {
-                break;
+        List<ToolResult> toolResults = new ArrayList<>();
+        for (DeepSeekChatClient.ToolCallPlan call : plan.tools()) {
+            if (call == null) {
+                continue;
             }
             try {
-                switch (tool) {
-                    case "music.search" -> collectSongCandidates(
-                            musicRecommendationClient.searchSongs(searchKeyword(content, plan)),
-                            candidates);
-                    case "music.list" -> collectSongCandidates(
-                            musicRecommendationClient.listSongs(1, Math.min(plan.limit(), MAX_CANDIDATE_SONGS)),
-                            candidates);
-                    case "rec.daily" -> collectSongCandidates(recRecommendationClient.daily(userId), candidates);
-                    case "rec.hot" -> collectSongCandidates(recRecommendationClient.hot(), candidates);
+                int before = candidates.size();
+                switch (call.name()) {
+                    case "music.search" -> {
+                        Object body = musicRecommendationClient.searchSongs(keyword(content, call));
+                        collectSongCandidates(body, candidates, "PROJECT_SEARCH", call.purpose());
+                        toolResults.add(okResult(call, "本地歌库关键词搜索完成", candidates.size() - before));
+                    }
+                    case "music.catalog" -> {
+                        Object body = musicRecommendationClient.listSongs(1, Math.min(call.limit(), MAX_CANDIDATE_SONGS));
+                        collectSongCandidates(body, candidates, "PROJECT_CATALOG", call.purpose());
+                        toolResults.add(okResult(call, "已获取本地真实歌曲候选池", candidates.size() - before));
+                    }
+                    case "music.neteaseSearch" -> {
+                        Object body = musicRecommendationClient.searchNetease(keyword(content, call), Math.min(call.limit(), 30));
+                        collectSongCandidates(body, candidates, "NETEASE_SEARCH", call.purpose());
+                        toolResults.add(okResult(call, "网易云搜索完成", candidates.size() - before));
+                    }
+                    case "rec.daily" -> {
+                        Object body = recRecommendationClient.daily(userId);
+                        collectSongCandidates(body, candidates, "REC_DAILY", call.purpose());
+                        toolResults.add(okResult(call, "每日推荐已返回", candidates.size() - before));
+                    }
+                    case "rec.hot" -> {
+                        Object body = recRecommendationClient.hot();
+                        collectSongCandidates(body, candidates, "REC_HOT", call.purpose());
+                        toolResults.add(okResult(call, "热门榜单已返回", candidates.size() - before));
+                    }
                     case "rec.preferences" -> {
-                        // Preference tags are useful for planning, but they are not songs by themselves.
-                        recRecommendationClient.preferences(userId);
+                        Object body = recRecommendationClient.preferences(userId);
+                        toolResults.add(new ToolResult(
+                                call.name(),
+                                call.purpose(),
+                                "ok",
+                                "用户偏好标签：" + summarize(body, 180),
+                                0
+                        ));
                     }
-                    default -> {
-                        // Ignore unknown model-planned tools so the chat path stays resilient.
+                    case "weather.now" -> {
+                        WeatherService.WeatherResponse weather = weatherService.weather(location(content, call));
+                        toolResults.add(new ToolResult(
+                                call.name(),
+                                call.purpose(),
+                                "ok",
+                                "天气：" + weather.city() + " " + weather.text() + " " + weather.temp()
+                                        + "，source=" + weather.source(),
+                                0
+                        ));
                     }
+                    default -> toolResults.add(new ToolResult(
+                            call.name(),
+                            call.purpose(),
+                            "ignored",
+                            "未知工具，已跳过",
+                            0
+                    ));
                 }
-            } catch (Exception ignored) {
-                // A single tool failure should not break normal chat.
+                if (candidates.size() >= MAX_CANDIDATE_SONGS) {
+                    break;
+                }
+            } catch (Exception e) {
+                toolResults.add(new ToolResult(
+                        call.name(),
+                        call.purpose(),
+                        "failed",
+                        trim(e.getMessage(), 180),
+                        0
+                ));
             }
         }
 
-        if (candidates.isEmpty()) {
+        if (plansMusicTools(plan) && candidates.isEmpty()) {
             try {
-                collectSongCandidates(musicRecommendationClient.listSongs(1, 50), candidates);
-            } catch (Exception ignored) {
-                // No local fake songs: an empty candidate pool should stay visible to the AI/fallback.
+                Object body = musicRecommendationClient.listSongs(1, 50);
+                collectSongCandidates(body, candidates, "PROJECT_CATALOG", "音乐工具无结果后的本地候选池兜底");
+                toolResults.add(new ToolResult(
+                        "music.catalog",
+                        "音乐工具无结果后的本地候选池兜底",
+                        "ok",
+                        "已补充本地真实歌曲候选池",
+                        candidates.size()
+                ));
+            } catch (Exception e) {
+                toolResults.add(new ToolResult(
+                        "music.catalog",
+                        "音乐工具无结果后的本地候选池兜底",
+                        "failed",
+                        trim(e.getMessage(), 180),
+                        0
+                ));
             }
         }
 
-        return candidates.values().stream().limit(MAX_CANDIDATE_SONGS).toList();
+        return new ToolExecution(
+                candidates.values().stream().limit(MAX_CANDIDATE_SONGS).toList(),
+                toolResults
+        );
     }
 
-    private static String searchKeyword(String content, DeepSeekChatClient.ToolPlan plan) {
-        if (plan != null && plan.keyword() != null && !plan.keyword().isBlank()) {
-            return plan.keyword();
+    private static boolean plansMusicTools(DeepSeekChatClient.ToolPlan plan) {
+        return plan != null && plan.tools().stream().anyMatch(call -> call.name().startsWith("music.") || call.name().startsWith("rec."));
+    }
+
+    private static String keyword(String content, DeepSeekChatClient.ToolCallPlan call) {
+        return call.keyword() == null || call.keyword().isBlank() ? content : call.keyword();
+    }
+
+    private static String location(String content, DeepSeekChatClient.ToolCallPlan call) {
+        if (call.location() != null && !call.location().isBlank()) {
+            return call.location();
         }
-        return content;
+        for (String city : List.of("北京", "上海", "广州", "深圳", "成都", "杭州", "南京", "武汉", "重庆", "西安")) {
+            if (content.contains(city)) {
+                return city;
+            }
+        }
+        return "北京";
+    }
+
+    private static ToolResult okResult(DeepSeekChatClient.ToolCallPlan call, String summary, int songCount) {
+        return new ToolResult(call.name(), call.purpose(), "ok", summary, Math.max(songCount, 0));
     }
 
     private static String buildFallbackReply(
             String content,
             DeepSeekChatClient.ToolPlan plan,
-            List<SongCandidate> candidates) {
-        if (plan != null && plan.needTools()) {
-            if (candidates == null || candidates.isEmpty()) {
-                return "我理解你想找歌，但现在项目音乐服务没有返回可用歌曲。你可以换个关键词，或者先确认 music/rec 服务和歌库数据。";
+            ToolExecution execution) {
+        if (plan != null && "weather".equals(plan.chatMode())) {
+            return execution.toolResults().stream()
+                    .filter(result -> "weather.now".equals(result.name()) && "ok".equals(result.status()))
+                    .findFirst()
+                    .map(ToolResult::summary)
+                    .orElse("我理解你在问天气，但天气服务现在没有返回可用结果。");
+        }
+        if (plansMusicTools(plan)) {
+            if (execution.candidates().isEmpty()) {
+                return "我理解你想找歌，但现在音乐工具没有返回可用歌曲。你可以换个关键词，或者先确认 music/rec/网易云代理服务。";
             }
-            return "我先从项目歌库里挑了几首真实可用的歌。等 AI 服务恢复后，我会再按你的语境细选。";
+            return "我先从真实音乐数据里挑了几首可用候选。AI 服务恢复后，我会再按你的语境细选。";
         }
         if (content.contains("什么模型") || content.contains("你是谁")) {
-            return "我是这个音乐电台里的 AI 助手，可以正常聊天，也可以在需要时读取项目里的音乐和推荐数据。";
+            return "我是这个音乐电台里的 AI 助手，可以正常聊天，也可以在需要时调用音乐、推荐、天气等项目工具。";
         }
-        return "我在，可以继续聊。需要音乐、推荐、故事或别的问题，都可以直接说。";
+        return "我在，可以继续聊。需要音乐、推荐、天气或别的问题，都可以直接说。";
     }
 
     private void appendHistory(long userId, ChatMessage message) {
@@ -221,13 +319,17 @@ public class ChatService {
     }
 
     @SuppressWarnings("unchecked")
-    private static void collectSongCandidates(Object value, Map<String, SongCandidate> candidates) {
+    private static void collectSongCandidates(
+            Object value,
+            Map<String, SongCandidate> candidates,
+            String defaultSource,
+            String defaultReason) {
         if (value == null || candidates.size() >= MAX_CANDIDATE_SONGS) {
             return;
         }
         if (value instanceof Collection<?> collection) {
             for (Object item : collection) {
-                collectSongCandidates(item, candidates);
+                collectSongCandidates(item, candidates, defaultSource, defaultReason);
                 if (candidates.size() >= MAX_CANDIDATE_SONGS) {
                     return;
                 }
@@ -235,13 +337,13 @@ public class ChatService {
             return;
         }
         if (value instanceof Map<?, ?> map) {
-            SongCandidate song = toSongCandidate((Map<String, Object>) map);
+            SongCandidate song = toSongCandidate((Map<String, Object>) map, defaultSource, defaultReason);
             if (song != null) {
                 candidates.putIfAbsent(song.key(), song);
                 return;
             }
-            for (String key : List.of("data", "records", "list", "songs", "items")) {
-                collectSongCandidates(map.get(key), candidates);
+            for (String key : List.of("data", "records", "result", "list", "songs", "items", "tracks")) {
+                collectSongCandidates(map.get(key), candidates, defaultSource, defaultReason);
                 if (candidates.size() >= MAX_CANDIDATE_SONGS) {
                     return;
                 }
@@ -249,22 +351,78 @@ public class ChatService {
         }
     }
 
-    private static SongCandidate toSongCandidate(Map<String, Object> map) {
+    private static SongCandidate toSongCandidate(Map<String, Object> map, String defaultSource, String defaultReason) {
         String title = firstText(map, "title", "name", "songName", "song");
-        if (title.isBlank()) {
+        if (title.isBlank() || looksLikeContainerOnly(map)) {
             return null;
+        }
+        String source = firstText(map, "source");
+        if (source.isBlank()) {
+            source = defaultSource;
+        }
+        String reason = firstText(map, "reason");
+        if (reason.isBlank()) {
+            reason = defaultReason;
         }
         return new SongCandidate(
                 longValue(firstValue(map, "id", "songId", "song_id")),
                 title,
-                firstText(map, "artist", "singer", "author"),
-                firstText(map, "album", "albumName"),
+                artistText(map),
+                albumText(map),
                 firstText(map, "genre", "style"),
                 firstText(map, "emotionTags", "emotion_tags", "tags"),
                 intValue(firstValue(map, "playCount", "play_count", "score", "rank")),
-                firstText(map, "source"),
-                firstText(map, "reason")
+                source,
+                reason
         );
+    }
+
+    private static boolean looksLikeContainerOnly(Map<String, Object> map) {
+        return map.containsKey("songs") || map.containsKey("records") || map.containsKey("tracks");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String artistText(Map<String, Object> map) {
+        String direct = firstText(map, "artist", "singer", "author");
+        if (!direct.isBlank()) {
+            return direct;
+        }
+        for (String key : List.of("artists", "ar", "singers")) {
+            Object value = map.get(key);
+            if (value instanceof Collection<?> collection) {
+                List<String> names = new ArrayList<>();
+                for (Object item : collection) {
+                    if (item instanceof Map<?, ?> artistMap) {
+                        String name = firstText((Map<String, Object>) artistMap, "name");
+                        if (!name.isBlank()) {
+                            names.add(name);
+                        }
+                    }
+                }
+                if (!names.isEmpty()) {
+                    return String.join("/", names);
+                }
+            }
+        }
+        return "";
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String albumText(Map<String, Object> map) {
+        String direct = firstText(map, "album", "albumName");
+        if (!direct.isBlank() && !direct.startsWith("{")) {
+            return direct;
+        }
+        for (String key : List.of("album", "al")) {
+            Object value = map.get(key);
+            if (value instanceof Map<?, ?> albumMap) {
+                String name = firstText((Map<String, Object>) albumMap, "name");
+                if (!name.isBlank()) {
+                    return name;
+                }
+            }
+        }
+        return "";
     }
 
     private static Object firstValue(Map<String, Object> map, String... keys) {
@@ -310,6 +468,21 @@ public class ChatService {
         return null;
     }
 
+    private static String summarize(Object value, int maxLength) {
+        if (value == null) {
+            return "(empty)";
+        }
+        return trim(value.toString(), maxLength);
+    }
+
+    private static String trim(String value, int maxLength) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        String text = value.trim();
+        return text.length() <= maxLength ? text : text.substring(0, maxLength) + "...";
+    }
+
     private static String normalize(String value) {
         if (value == null || value.isBlank()) {
             return "推荐一些歌";
@@ -338,10 +511,16 @@ public class ChatService {
     public record ChatSendRequest(Long userId, String content) {
     }
 
-    public record ChatSendResponse(ChatMessage reply, List<String> songs) {
+    public record ChatSendResponse(ChatMessage reply, List<String> songs, List<ToolResult> toolCalls) {
     }
 
     public record ChatMessage(String role, String text, String time) {
+    }
+
+    public record ToolResult(String name, String purpose, String status, String summary, int songCount) {
+    }
+
+    private record ToolExecution(List<SongCandidate> candidates, List<ToolResult> toolResults) {
     }
 
     public record SongCandidate(
@@ -357,9 +536,9 @@ public class ChatService {
 
         public String key() {
             if (id != null) {
-                return "id:" + id;
+                return source + ":id:" + id;
             }
-            return (title + "||" + artist).toLowerCase();
+            return (source + "||" + title + "||" + artist).toLowerCase();
         }
 
         public String label() {
@@ -369,6 +548,9 @@ public class ChatService {
         public String brief() {
             List<String> parts = new ArrayList<>();
             parts.add(label());
+            if (source != null && !source.isBlank()) {
+                parts.add("source=" + source);
+            }
             if (genre != null && !genre.isBlank()) {
                 parts.add("genre=" + genre);
             }

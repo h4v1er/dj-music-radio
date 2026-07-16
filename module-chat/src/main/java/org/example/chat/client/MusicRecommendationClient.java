@@ -12,4 +12,7 @@ public interface MusicRecommendationClient {
 
     @GetMapping("/music/song/list")
     Object listSongs(@RequestParam("page") int page, @RequestParam("size") int size);
+
+    @GetMapping("/music/netease/search")
+    Object searchNetease(@RequestParam("keywords") String keywords, @RequestParam("limit") int limit);
 }

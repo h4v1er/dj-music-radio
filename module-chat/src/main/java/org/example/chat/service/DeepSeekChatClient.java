@@ -18,53 +18,82 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Component
 public class DeepSeekChatClient {
 
     private static final Logger log = LoggerFactory.getLogger(DeepSeekChatClient.class);
 
+    private static final Set<String> ALLOWED_TOOLS = Set.of(
+            "music.search",
+            "music.catalog",
+            "music.neteaseSearch",
+            "rec.daily",
+            "rec.hot",
+            "rec.preferences",
+            "weather.now"
+    );
+
     private static final String TOOL_PLAN_SYSTEM_PROMPT = """
-            You are the reasoning and tool-planning brain for a Chinese AI companion inside a music radio app.
-            Decide whether the assistant needs project data before answering.
+            You are the tool-planning brain for a Chinese AI assistant inside a music radio app.
+            The assistant should chat normally, and only use tools when real project or external data is useful.
+
             Available tools:
-            - music.search: search songs by a concise keyword, artist, title, genre, or album.
-            - music.list: fetch a pool of real songs from the project music database.
-            - rec.daily: fetch the user's daily recommendations.
-            - rec.hot: fetch hot songs.
-            - rec.preferences: fetch the user's preference tags.
-            Rules:
-            - For ordinary chat, identity questions, stories, explanations, greetings, or emotional conversation without an explicit song request, set needTools=false.
-            - For song requests, playlists, "what should I listen to", "recommend", "change songs", or follow-up requests like "还有啥" after music context, set needTools=true.
-            - If the request is semantic like rainy day, running, healing, breakup, late night, or work focus, include music.list so the final model can choose from real candidates.
-            - If the user asks for daily/personal/random recommendations, include rec.daily, rec.preferences, music.list, and rec.hot.
-            - If the user names a singer, title, genre, or keyword, include music.search and music.list.
+            - music.search: targeted local database search. Use for explicit song title, artist, album, genre, or keyword.
+            - music.catalog: local database candidate pool. Use for semantic music requests like rainy day, healing, breakup, running, studying, coding, sleeping, late night.
+            - music.neteaseSearch: external NetEase Cloud Music search through the project's music service. Use when the user asks for NetEase, a specific popular song/artist not likely in the local DB, or local results may be too narrow.
+            - rec.daily: user's daily recommendation list.
+            - rec.hot: current hot ranking from the recommendation service.
+            - rec.preferences: user's preference tags; not songs, but useful context for personalized recommendation.
+            - weather.now: current weather by city. Use for weather questions or weather-aware music recommendations.
+
+            Planning rules:
+            - Ordinary chat, identity questions, stories, explanations, greetings, and emotional conversation do not need tools unless the user asks for factual app data, weather, or songs.
+            - For music recommendation, choose tools with clear purpose. Do not call every tool by default.
+            - For semantic scene-based music, prefer music.catalog plus rec.preferences; add weather.now only if weather or city matters.
+            - For explicit artist/title, prefer music.search; add music.neteaseSearch when the request asks NetEase or the local DB may miss it.
+            - For "daily", "random", "不知道听什么", prefer rec.daily plus rec.preferences; add rec.hot as a fallback.
+            - For weather-only questions, use weather.now and no music tools.
+            - Web crawling is not currently available. Do not invent a web.search tool.
+
             Return only one JSON object:
             {
-              "chatMode": "general|music|story|smalltalk",
+              "chatMode": "general|music|weather|story|smalltalk",
+              "answerGoal": "what the assistant should accomplish",
               "needTools": true,
-              "tools": ["music.list"],
-              "keyword": "short search keyword, can be empty",
-              "limit": 50,
+              "tools": [
+                {
+                  "name": "music.catalog",
+                  "purpose": "why this tool is needed",
+                  "keyword": "optional keyword",
+                  "location": "optional city",
+                  "limit": 40
+                }
+              ],
               "responseStyle": "short Chinese style label"
             }
             """;
 
     private static final String FINAL_REPLY_SYSTEM_PROMPT = """
-            You are a natural Chinese AI companion in a DJ music radio app.
-            Answer like a normal helpful AI, not like a rigid template.
-            If project tool results are provided, use them as factual data.
+            You are a natural Chinese AI assistant in a DJ music radio app.
+            Answer like a helpful human assistant, not like a rigid DJ template.
+            Use tool results as factual context. If a tool failed or returned demo data, be honest and do not pretend it is complete.
+
             Music rules:
             - Select songs only from the numbered candidate list.
             - Return selectedIndexes from the candidate list; do not invent song names.
             - Select 1 to 4 songs unless the user asks for more.
-            - The UI will display selected songs separately, so the reply should explain the vibe and avoid a long song-name list.
+            - The UI displays selected songs separately, so the reply should explain the reasoning/vibe and avoid repeating a long song-name list.
             - Do not mention any song name that is not included in selectedIndexes.
-            - It is fine to choose by title, artist, genre, emotion tags, lyrics summary, popularity, scene, and user context together.
-            General chat rules:
-            - Do not force the topic back to music when the user is just chatting.
+            - You may combine title, artist, album, source, genre, emotion tags, reason, weather, user preference, and conversation context.
+
+            General rules:
+            - Do not force ordinary chat back to music.
             - Identity questions can be answered naturally: you are the AI assistant for this music radio app, powered by the configured model service.
-            - Keep normal chat concise but not robotic.
+            - For weather-only questions, answer using weather tool results and selectedIndexes=[].
+            - Keep replies concise but natural.
+
             Return only JSON:
             {
               "reply": "Chinese reply text",
@@ -98,7 +127,7 @@ public class DeepSeekChatClient {
                             Map.of("role", "user", "content", buildPlanPrompt(normalizedInput, history))
                     ),
                     0.2,
-                    500,
+                    700,
                     true
             );
             if (content.isBlank()) {
@@ -109,10 +138,9 @@ public class DeepSeekChatClient {
             });
             ToolPlan plan = new ToolPlan(
                     text(map, "chatMode", "general"),
+                    text(map, "answerGoal", ""),
                     bool(map, "needTools", false),
-                    stringList(map.get("tools")),
-                    text(map, "keyword", ""),
-                    intValue(map.get("limit"), 50),
+                    parseToolCalls(map.get("tools"), normalizedInput),
                     text(map, "responseStyle", "")
             );
             return plan.normalized(normalizedInput);
@@ -125,6 +153,7 @@ public class DeepSeekChatClient {
     public AiReply composeReply(
             String userInput,
             ToolPlan plan,
+            List<ChatService.ToolResult> toolResults,
             List<ChatService.SongCandidate> candidates,
             List<ChatService.ChatMessage> history) {
         if (!isConfigured()) {
@@ -136,7 +165,8 @@ public class DeepSeekChatClient {
             userPrompt.append("Current user message: ").append(normalize(userInput, "")).append('\n');
             userPrompt.append("Configured model: ").append(model).append('\n');
             userPrompt.append("Tool plan: ").append(plan == null ? ToolPlan.local(userInput) : plan).append('\n');
-            userPrompt.append("Candidate songs from project services:\n").append(formatCandidates(candidates)).append('\n');
+            userPrompt.append("Tool results:\n").append(formatToolResults(toolResults)).append('\n');
+            userPrompt.append("Candidate songs from project/external services:\n").append(formatCandidates(candidates)).append('\n');
 
             String content = callDeepSeek(
                     List.of(
@@ -144,7 +174,7 @@ public class DeepSeekChatClient {
                             Map.of("role", "user", "content", userPrompt.toString())
                     ),
                     0.75,
-                    700,
+                    800,
                     true
             );
             if (content.isBlank()) {
@@ -215,12 +245,32 @@ public class DeepSeekChatClient {
         return apiKey != null && !apiKey.isBlank() && !"your-deepseek-api-key".equals(apiKey);
     }
 
+    private static String formatToolResults(List<ChatService.ToolResult> results) {
+        if (results == null || results.isEmpty()) {
+            return "(none)";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (ChatService.ToolResult result : results) {
+            builder.append("- ")
+                    .append(result.name())
+                    .append(" [")
+                    .append(result.status())
+                    .append("] ")
+                    .append(result.summary());
+            if (result.songCount() > 0) {
+                builder.append(" | songs=").append(result.songCount());
+            }
+            builder.append('\n');
+        }
+        return builder.toString().trim();
+    }
+
     private static String formatCandidates(List<ChatService.SongCandidate> candidates) {
         if (candidates == null || candidates.isEmpty()) {
             return "(none)";
         }
         StringBuilder builder = new StringBuilder();
-        int limit = Math.min(60, candidates.size());
+        int limit = Math.min(70, candidates.size());
         for (int i = 0; i < limit; i++) {
             ChatService.SongCandidate song = candidates.get(i);
             builder.append(i + 1).append(". ").append(song.brief()).append('\n');
@@ -345,17 +395,39 @@ public class DeepSeekChatClient {
         return fallback;
     }
 
-    private static List<String> stringList(Object value) {
+    private static List<ToolCallPlan> parseToolCalls(Object value, String fallbackKeyword) {
         if (!(value instanceof Collection<?> collection)) {
             return List.of();
         }
-        List<String> result = new ArrayList<>();
+        List<ToolCallPlan> result = new ArrayList<>();
         for (Object item : collection) {
-            if (item != null && !item.toString().isBlank()) {
-                result.add(item.toString().trim());
+            ToolCallPlan call = parseToolCall(item, fallbackKeyword);
+            if (call != null) {
+                result.add(call);
             }
         }
         return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ToolCallPlan parseToolCall(Object value, String fallbackKeyword) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof String text) {
+            return new ToolCallPlan(text.trim(), "", fallbackKeyword, "", 50).normalized(fallbackKeyword);
+        }
+        if (value instanceof Map<?, ?> rawMap) {
+            Map<String, Object> map = (Map<String, Object>) rawMap;
+            return new ToolCallPlan(
+                    text(map, "name", ""),
+                    text(map, "purpose", ""),
+                    text(map, "keyword", fallbackKeyword),
+                    text(map, "location", ""),
+                    intValue(map.get("limit"), 50)
+            ).normalized(fallbackKeyword);
+        }
+        return null;
     }
 
     private static String normalize(String value, String fallback) {
@@ -364,37 +436,50 @@ public class DeepSeekChatClient {
 
     public record ToolPlan(
             String chatMode,
+            String answerGoal,
             boolean needTools,
-            List<String> tools,
-            String keyword,
-            int limit,
+            List<ToolCallPlan> tools,
             String responseStyle) {
 
         public static ToolPlan local(String userInput) {
             String normalized = normalize(userInput, "");
+            List<ToolCallPlan> calls = new ArrayList<>();
             boolean music = looksLikeMusicRequest(normalized);
-            List<String> tools = music ? List.of("music.search", "music.list", "rec.hot") : List.of();
-            return new ToolPlan(music ? "music" : "general", music, tools, normalized, 50, "");
+            boolean weather = looksLikeWeatherRequest(normalized);
+            if (weather) {
+                calls.add(new ToolCallPlan("weather.now", "回答天气或结合天气推荐", "", extractLocation(normalized), 1));
+            }
+            if (music) {
+                calls.add(new ToolCallPlan("music.search", "先按关键词查本地歌库", normalized, "", 20));
+                calls.add(new ToolCallPlan("music.catalog", "语义场景候选池", normalized, "", 50));
+                calls.add(new ToolCallPlan("rec.hot", "本地歌库不足时补充热门候选", "", "", 10));
+                if (normalized.contains("网易云")) {
+                    calls.add(new ToolCallPlan("music.neteaseSearch", "按用户要求搜索网易云", normalized, "", 20));
+                }
+            }
+            String mode = weather && !music ? "weather" : music ? "music" : "general";
+            return new ToolPlan(mode, "", !calls.isEmpty(), calls, "").normalized(normalized);
         }
 
         public ToolPlan normalized(String userInput) {
-            boolean shouldUseTools = needTools || tools != null && !tools.isEmpty();
-            List<String> safeTools = tools == null ? List.of() : tools.stream()
-                    .filter(tool -> tool != null && !tool.isBlank())
-                    .map(String::trim)
+            List<ToolCallPlan> safeTools = tools == null ? List.of() : tools.stream()
+                    .map(tool -> tool == null ? null : tool.normalized(userInput))
+                    .filter(tool -> tool != null && ALLOWED_TOOLS.contains(tool.name()))
                     .distinct()
                     .toList();
+            boolean shouldUseTools = needTools || !safeTools.isEmpty();
             if (shouldUseTools && safeTools.isEmpty()) {
-                safeTools = List.of("music.list");
+                if ("weather".equals(chatMode) || looksLikeWeatherRequest(userInput)) {
+                    safeTools = List.of(new ToolCallPlan("weather.now", "获取天气", "", extractLocation(userInput), 1));
+                } else if ("music".equals(chatMode) || looksLikeMusicRequest(userInput)) {
+                    safeTools = List.of(new ToolCallPlan("music.catalog", "获取本地歌曲候选池", userInput, "", 50));
+                }
             }
-            int safeLimit = limit <= 0 ? 50 : Math.min(limit, 80);
-            String safeKeyword = normalize(keyword, userInput);
             return new ToolPlan(
                     normalize(chatMode, shouldUseTools ? "music" : "general"),
+                    normalize(answerGoal, ""),
                     shouldUseTools,
                     safeTools,
-                    safeKeyword,
-                    safeLimit,
                     normalize(responseStyle, "")
             );
         }
@@ -406,8 +491,49 @@ public class DeepSeekChatClient {
                     || lower.contains("听")
                     || lower.contains("推荐")
                     || lower.contains("播放")
+                    || lower.contains("网易云")
                     || lower.contains("music")
                     || lower.contains("song");
+        }
+
+        private static boolean looksLikeWeatherRequest(String value) {
+            return value.contains("天气")
+                    || value.contains("下雨")
+                    || value.contains("晴")
+                    || value.contains("阴天")
+                    || value.contains("气温");
+        }
+
+        private static String extractLocation(String value) {
+            for (String city : List.of("北京", "上海", "广州", "深圳", "成都", "杭州", "南京", "武汉", "重庆", "西安")) {
+                if (value.contains(city)) {
+                    return city;
+                }
+            }
+            return "北京";
+        }
+    }
+
+    public record ToolCallPlan(
+            String name,
+            String purpose,
+            String keyword,
+            String location,
+            int limit) {
+
+        public ToolCallPlan normalized(String fallbackKeyword) {
+            String safeName = normalize(name, "");
+            if (!ALLOWED_TOOLS.contains(safeName)) {
+                return null;
+            }
+            int safeLimit = limit <= 0 ? 20 : Math.min(limit, 80);
+            return new ToolCallPlan(
+                    safeName,
+                    normalize(purpose, ""),
+                    normalize(keyword, fallbackKeyword),
+                    normalize(location, ""),
+                    safeLimit
+            );
         }
     }
 
