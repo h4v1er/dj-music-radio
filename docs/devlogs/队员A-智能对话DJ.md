@@ -21,6 +21,10 @@
 - [x] `ChatPanel.vue` 接入真实后端接口，替换前端假回复逻辑
 - [x] `WeatherWidget.vue` 接入天气接口，展示城市、温度、天气和问候语
 - [x] 验证通过：前端 `npm run build`、后端 Maven 打包、Gateway `/chat/send` `/chat/history` `/chat/weather` 联调
+- [x] 新增 `ChatService`，REST 和 WebSocket 共用对话回复、推荐歌曲和历史记录逻辑
+- [x] 新增 `/chat/ws` WebSocket 端点，支持 `{ type, userId, content }` 消息并返回 `{ type, content, songs, time }`
+- [x] `ChatPanel.vue` 优先使用 WebSocket 实时对话，连接不可用时保留 REST 降级发送
+- [x] 验证通过：前端构建、完整 Maven 打包、Gateway WebSocket `ws://127.0.0.1:8080/chat/ws` 收发消息、前端 5173 可访问
 
 ## 第2天（日期：______）
 - [ ] 
