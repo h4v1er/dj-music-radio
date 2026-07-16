@@ -6,5 +6,6 @@ export const recApi = {
   daily: (userId) => api.get('/rec/daily', { params: { userId } }),
   hot: () => api.get('/rec/hot'),
   similar: (songId) => api.get('/rec/similar', { params: { songId } }),
+  preferences: (userId) => api.get('/rec/preferences', { params: { userId } }),
   reportBehavior: (data) => api.post('/rec/behavior', data)
 }

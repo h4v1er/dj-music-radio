@@ -1,22 +1,55 @@
 <script setup>
 /**
  * 👤 队员C — 每日推荐面板
- * 功能: 热门榜单 + 个性化推荐 + 定时推送 + 数据可视化
+ * 功能: 热门榜单 + 个性化推荐 + 偏好标签
  * 后端: module-rec (:8083)  Redis + RabbitMQ
  */
 import { ref, onMounted } from 'vue'
 import { recApi } from '../api/rec'
 
+// 临时使用默认用户ID，等队员D的用户模块做好后替换
+const userId = ref(1)
 const connected = ref(false)
-const hotSongs = ref([
-  { rank: '🔥1', name: '加载中...', artist: '' },
-  { rank: '🔥2', name: '加载中...', artist: '' },
-  { rank: '🔥3', name: '加载中...', artist: '' },
-])
+
+// 热门榜单
+const hotSongs = ref([])
+const hotLoading = ref(true)
+
+// 今日推荐
+const dailySongs = ref([])
+const dailyLoading = ref(true)
+
+// 偏好标签
+const tags = ref([])
+const tagsLoading = ref(true)
 
 onMounted(async () => {
-  try { await recApi.hello(); connected.value = true } catch(e) {}
-  // TODO: 从 Redis 加载热门榜单数据
+  // 检查后端连通性
+  try { await recApi.hello(); connected.value = true } catch (e) { connected.value = false }
+
+  // 加载热门榜单
+  try {
+    const res = await recApi.hot()
+    hotSongs.value = res.data || []
+  } catch (e) { /* 后端没启动时保持空列表 */ }
+  hotLoading.value = false
+
+  // 加载今日推荐
+  try {
+    const res = await recApi.daily(userId.value)
+    dailySongs.value = res.data || []
+  } catch (e) { /* 后端没启动时保持空列表 */ }
+  dailyLoading.value = false
+
+  // 加载偏好标签
+  if (connected.value) {
+    try {
+      const res = await recApi.preferences(userId.value)
+      if (res.data && res.data.length > 0) tags.value = res.data
+    } catch (e) { /* 后端出错，用默认值 */ }
+  }
+  if (tags.value.length === 0) tags.value = ['摇滚', '电子', '流行']
+  tagsLoading.value = false
 })
 </script>
 
@@ -30,13 +63,16 @@ onMounted(async () => {
     <!-- 热门榜单 -->
     <div class="section">
       <div class="section-title">🔥 热门榜单</div>
-      <div class="rank-list">
-        <div v-for="(s, i) in hotSongs" :key="i" class="rank-item">
-          <span class="rank-badge">{{ s.rank }}</span>
+      <div v-if="hotLoading" class="loading-text">加载中…</div>
+      <div v-else-if="hotSongs.length === 0" class="loading-text">暂无榜单数据</div>
+      <div v-else class="rank-list">
+        <div v-for="s in hotSongs" :key="s.songId" class="rank-item">
+          <span class="rank-badge">{{ s.rank === 1 ? '🥇' : s.rank === 2 ? '🥈' : s.rank === 3 ? '🥉' : '🎵' + s.rank }}</span>
           <div>
-            <div class="song-name">{{ s.name }}</div>
+            <div class="song-name">{{ s.title || '歌曲#' + s.songId }}</div>
             <div class="song-artist">{{ s.artist || '—' }}</div>
           </div>
+          <span class="hot-score">{{ s.score }}🔥</span>
         </div>
       </div>
     </div>
@@ -44,9 +80,16 @@ onMounted(async () => {
     <!-- 今日推荐 -->
     <div class="section">
       <div class="section-title">🎯 今日为你推荐</div>
-      <div class="recommend-list">
-        <div class="rec-item" v-for="i in 3" :key="i">
-          <span>🎵</span> 推荐歌曲 {{ i }}
+      <div v-if="dailyLoading" class="loading-text">加载中…</div>
+      <div v-else-if="dailySongs.length === 0" class="loading-text">暂无推荐数据</div>
+      <div v-else class="recommend-list">
+        <div v-for="s in dailySongs" :key="s.songId" class="rec-item">
+          <span>🎵</span>
+          <div>
+            <div class="song-name">{{ s.title || '歌曲#' + s.songId }}</div>
+            <div class="song-artist">{{ s.artist || '—' }}</div>
+          </div>
+          <span v-if="s.reason" class="rec-reason">{{ s.reason }}</span>
         </div>
       </div>
     </div>
@@ -55,8 +98,7 @@ onMounted(async () => {
     <div class="section">
       <div class="section-title">🏷️ 你的偏好</div>
       <div class="tags">
-        <el-tag size="small" v-for="t in ['摇滚','电子','流行']" :key="t"
-                style="margin: 2px">{{ t }}</el-tag>
+        <el-tag size="small" v-for="t in tags" :key="t" style="margin: 2px">{{ t }}</el-tag>
       </div>
     </div>
   </div>
@@ -67,6 +109,7 @@ onMounted(async () => {
 
 .section { }
 .section-title { font-size: 13px; color: var(--color-text-muted); margin-bottom: 8px; }
+.loading-text { font-size: 12px; color: var(--color-text-muted); padding: 4px 0; }
 
 .rank-item {
   display: flex; align-items: center; gap: 10px;
@@ -74,15 +117,17 @@ onMounted(async () => {
   transition: background 0.15s;
 }
 .rank-item:hover { background: var(--color-surface-hover); }
-.rank-badge { font-size: 13px; min-width: 24px; }
+.rank-badge { font-size: 14px; min-width: 24px; }
 .song-name { font-size: 13px; }
 .song-artist { font-size: 11px; color: var(--color-text-muted); }
+.hot-score { margin-left: auto; font-size: 11px; color: var(--color-primary); }
 
 .rec-item {
   padding: 6px 10px; border-radius: var(--radius-sm); font-size: 13px;
-  display: flex; gap: 8px; align-items: center; cursor: pointer;
+  display: flex; gap: 8px; align-items: center; cursor: pointer; flex-wrap: wrap;
 }
 .rec-item:hover { background: var(--color-surface-hover); }
+.rec-reason { font-size: 11px; color: var(--color-accent); margin-left: auto; }
 
 .tags { display: flex; flex-wrap: wrap; gap: 4px; }
 </style>
