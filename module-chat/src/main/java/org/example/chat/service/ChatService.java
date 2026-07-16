@@ -72,12 +72,6 @@ public class ChatService {
         return new ArrayList<>(history);
     }
 
-    public WeatherResponse weather(String city) {
-        String safeCity = normalizeCity(city);
-        WeatherSnapshot snapshot = demoWeather(safeCity);
-        return new WeatherResponse(safeCity, snapshot.icon(), snapshot.temp(), snapshot.text(), greeting());
-    }
-
     private void appendHistory(long userId, ChatMessage message) {
         if (canUseDatabase()) {
             try {
@@ -162,19 +156,6 @@ public class ChatService {
         return List.of("今日开场 - DJ Radio", "晴天漫游 - Sample Artist", "低速公路 - Demo Band");
     }
 
-    private static WeatherSnapshot demoWeather(String city) {
-        if (city.contains("上海")) {
-            return new WeatherSnapshot("🌦️", "30°", "多云");
-        }
-        if (city.contains("广州") || city.contains("深圳")) {
-            return new WeatherSnapshot("🌧️", "31°", "阵雨");
-        }
-        if (city.contains("成都")) {
-            return new WeatherSnapshot("🌥️", "27°", "阴");
-        }
-        return new WeatherSnapshot("☀️", "28°", "晴");
-    }
-
     private static boolean containsAny(String value, String... keywords) {
         for (String keyword : keywords) {
             if (value.contains(keyword)) {
@@ -189,13 +170,6 @@ public class ChatService {
             return "推荐一些歌";
         }
         return value.trim();
-    }
-
-    private static String normalizeCity(String city) {
-        if (city == null || city.isBlank()) {
-            return "北京";
-        }
-        return city.trim();
     }
 
     private static String greeting() {
@@ -225,9 +199,4 @@ public class ChatService {
     public record ChatMessage(String role, String text, String time) {
     }
 
-    public record WeatherResponse(String city, String icon, String temp, String text, String greeting) {
-    }
-
-    private record WeatherSnapshot(String icon, String temp, String text) {
-    }
 }

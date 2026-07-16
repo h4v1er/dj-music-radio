@@ -28,5 +28,6 @@ mybatis-plus:
 
 # 天气 API（和风天气免费接口）
 weather:
-  api-key: your_api_key_here
-  base-url: https://devapi.qweather.com/v7
+  api-key: ${QWEATHER_API_KEY:}
+  weather-url: https://devapi.qweather.com/v7/weather/now
+  geo-url: https://geoapi.qweather.com/geo/v2/city/lookup
