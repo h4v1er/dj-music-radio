@@ -5,6 +5,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.List;
@@ -13,6 +14,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import org.example.chat.client.MusicRecommendationClient;
+import org.example.chat.client.RecRecommendationClient;
 import org.example.chat.entity.ChatHistory;
 import org.example.chat.mapper.ChatHistoryMapper;
 import org.springframework.stereotype.Service;
@@ -27,10 +30,17 @@ public class ChatService {
     private static final Map<Long, Deque<ChatMessage>> HISTORIES = new ConcurrentHashMap<>();
 
     private final ChatHistoryMapper chatHistoryMapper;
+    private final MusicRecommendationClient musicRecommendationClient;
+    private final RecRecommendationClient recRecommendationClient;
     private volatile long dbRetryAfter;
 
-    public ChatService(ChatHistoryMapper chatHistoryMapper) {
+    public ChatService(
+            ChatHistoryMapper chatHistoryMapper,
+            MusicRecommendationClient musicRecommendationClient,
+            RecRecommendationClient recRecommendationClient) {
         this.chatHistoryMapper = chatHistoryMapper;
+        this.musicRecommendationClient = musicRecommendationClient;
+        this.recRecommendationClient = recRecommendationClient;
     }
 
     public ChatSendResponse send(ChatSendRequest request) {
@@ -39,7 +49,7 @@ public class ChatService {
         String content = normalize(safeRequest.content());
         ChatMessage userMessage = new ChatMessage("user", content, now());
         ChatMessage reply = new ChatMessage("dj", buildReply(content), now());
-        List<String> songs = recommendSongs(content);
+        List<String> songs = recommendSongs(userId, content);
 
         appendHistory(userId, userMessage);
         appendHistory(userId, reply);
@@ -142,7 +152,26 @@ public class ChatService {
         return "我记下了。现在先按你的描述做一组音乐推荐，后面会继续根据播放和收藏调整。";
     }
 
-    private static List<String> recommendSongs(String content) {
+    private List<String> recommendSongs(long userId, String content) {
+        List<String> remoteSongs = remoteRecommendSongs(userId, content);
+        if (!remoteSongs.isEmpty()) {
+            return remoteSongs;
+        }
+        return localRecommendSongs(content);
+    }
+
+    private List<String> remoteRecommendSongs(long userId, String content) {
+        try {
+            if (containsAny(content, "推荐", "随便", "不知道")) {
+                return extractSongNames(recRecommendationClient.daily(userId));
+            }
+            return extractSongNames(musicRecommendationClient.searchSongs(searchKeyword(content)));
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    private static List<String> localRecommendSongs(String content) {
         String lower = content.toLowerCase(Locale.ROOT);
         if (containsAny(lower, "摇滚", "rock")) {
             return List.of("示例摇滚 01 - Aurora Band", "城市失眠 - Echo Road", "逆光电台 - The North");
@@ -154,6 +183,73 @@ public class ChatService {
             return List.of("晚风练习曲 - Soft Lake", "雨后房间 - Quiet Room", "慢速星光 - Mellow Sky");
         }
         return List.of("今日开场 - DJ Radio", "晴天漫游 - Sample Artist", "低速公路 - Demo Band");
+    }
+
+    private static String searchKeyword(String content) {
+        if (containsAny(content.toLowerCase(Locale.ROOT), "摇滚", "rock")) {
+            return "摇滚";
+        }
+        if (containsAny(content.toLowerCase(Locale.ROOT), "电子", "电音", "edm")) {
+            return "电子";
+        }
+        if (containsAny(content.toLowerCase(Locale.ROOT), "舒缓", "放松", "睡前", "安静")) {
+            return "舒缓";
+        }
+        return content;
+    }
+
+    private static List<String> extractSongNames(Object body) {
+        List<String> songs = new ArrayList<>();
+        collectSongNames(body, songs);
+        return songs.stream().filter(song -> !song.isBlank()).limit(3).toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void collectSongNames(Object value, List<String> songs) {
+        if (value == null || songs.size() >= 3) {
+            return;
+        }
+        if (value instanceof Collection<?> collection) {
+            for (Object item : collection) {
+                collectSongNames(item, songs);
+                if (songs.size() >= 3) {
+                    return;
+                }
+            }
+            return;
+        }
+        if (value instanceof Map<?, ?> map) {
+            String song = formatSong((Map<String, Object>) map);
+            if (!song.isBlank()) {
+                songs.add(song);
+                return;
+            }
+            for (String key : List.of("data", "records", "list", "songs", "items")) {
+                collectSongNames(map.get(key), songs);
+                if (songs.size() >= 3) {
+                    return;
+                }
+            }
+        }
+    }
+
+    private static String formatSong(Map<String, Object> map) {
+        String title = firstText(map, "title", "name", "songName", "song");
+        if (title.isBlank()) {
+            return "";
+        }
+        String artist = firstText(map, "artist", "singer", "author");
+        return artist.isBlank() ? title : title + " - " + artist;
+    }
+
+    private static String firstText(Map<String, Object> map, String... keys) {
+        for (String key : keys) {
+            Object value = map.get(key);
+            if (value != null && !value.toString().isBlank()) {
+                return value.toString().trim();
+            }
+        }
+        return "";
     }
 
     private static boolean containsAny(String value, String... keywords) {
