@@ -9,6 +9,7 @@ import org.example.rec.entity.DailyRecommend;
 import org.example.rec.entity.UserBehavior;
 import org.example.rec.mapper.DailyRecommendMapper;
 import org.example.rec.mapper.UserBehaviorMapper;
+import org.example.rec.mq.RecNotificationProducer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -29,6 +30,8 @@ public class RecommendScheduler {
     private DailyRecommendMapper dailyRecommendMapper;
     @Autowired(required = false)
     private MusicFeignClient musicFeignClient;
+    @Autowired(required = false)
+    private RecNotificationProducer notificationProducer;
 
     /**
      * 每天凌晨 2:00 执行
@@ -58,6 +61,15 @@ public class RecommendScheduler {
                     dailyRecommendMapper.insert(rec);
                 }
                 totalGenerated += recs.size();
+
+                // 通过 RabbitMQ 发送通知
+                if (notificationProducer != null) {
+                    try {
+                        notificationProducer.sendDailyReady(userId, recs.size());
+                    } catch (Exception e) {
+                        System.err.println("[每日推荐] RabbitMQ 发送失败: " + e.getMessage());
+                    }
+                }
             }
         }
 
