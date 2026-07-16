@@ -1,15 +1,20 @@
 package org.example.chat.service;
 
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import org.example.chat.entity.ChatHistory;
+import org.example.chat.mapper.ChatHistoryMapper;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -17,8 +22,16 @@ public class ChatService {
 
     private static final long DEFAULT_USER_ID = 1L;
     private static final int HISTORY_LIMIT = 10;
+    private static final long DB_RETRY_INTERVAL_MS = 30_000L;
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final Map<Long, Deque<ChatMessage>> HISTORIES = new ConcurrentHashMap<>();
+
+    private final ChatHistoryMapper chatHistoryMapper;
+    private volatile long dbRetryAfter;
+
+    public ChatService(ChatHistoryMapper chatHistoryMapper) {
+        this.chatHistoryMapper = chatHistoryMapper;
+    }
 
     public ChatSendResponse send(ChatSendRequest request) {
         ChatSendRequest safeRequest = request == null ? new ChatSendRequest(DEFAULT_USER_ID, "") : request;
@@ -35,7 +48,24 @@ public class ChatService {
     }
 
     public List<ChatMessage> history(Long userId) {
-        Deque<ChatMessage> history = HISTORIES.get(userId == null ? DEFAULT_USER_ID : userId);
+        long safeUserId = userId == null ? DEFAULT_USER_ID : userId;
+        if (canUseDatabase()) {
+            try {
+                List<ChatHistory> records = chatHistoryMapper.selectList(new LambdaQueryWrapper<ChatHistory>()
+                        .eq(ChatHistory::getUserId, safeUserId)
+                        .orderByDesc(ChatHistory::getCreateTime)
+                        .orderByDesc(ChatHistory::getId)
+                        .last("LIMIT " + HISTORY_LIMIT));
+                if (!records.isEmpty()) {
+                    Collections.reverse(records);
+                    return records.stream().map(ChatService::toMessage).toList();
+                }
+            } catch (Exception e) {
+                markDatabaseUnavailable();
+            }
+        }
+
+        Deque<ChatMessage> history = HISTORIES.get(safeUserId);
         if (history == null || history.isEmpty()) {
             return List.of(new ChatMessage("dj", greeting() + "我是你的 DJ 助手，今天想听点什么？", now()));
         }
@@ -48,7 +78,26 @@ public class ChatService {
         return new WeatherResponse(safeCity, snapshot.icon(), snapshot.temp(), snapshot.text(), greeting());
     }
 
-    private static void appendHistory(long userId, ChatMessage message) {
+    private void appendHistory(long userId, ChatMessage message) {
+        if (canUseDatabase()) {
+            try {
+                chatHistoryMapper.insert(toEntity(userId, message));
+            } catch (Exception e) {
+                markDatabaseUnavailable();
+            }
+        }
+        appendMemoryHistory(userId, message);
+    }
+
+    private boolean canUseDatabase() {
+        return System.currentTimeMillis() >= dbRetryAfter;
+    }
+
+    private void markDatabaseUnavailable() {
+        dbRetryAfter = System.currentTimeMillis() + DB_RETRY_INTERVAL_MS;
+    }
+
+    private static void appendMemoryHistory(long userId, ChatMessage message) {
         Deque<ChatMessage> history = HISTORIES.computeIfAbsent(userId, key -> new ArrayDeque<>());
         synchronized (history) {
             history.addLast(message);
@@ -56,6 +105,30 @@ public class ChatService {
                 history.removeFirst();
             }
         }
+    }
+
+    private static ChatHistory toEntity(long userId, ChatMessage message) {
+        ChatHistory entity = new ChatHistory();
+        entity.setUserId(userId);
+        entity.setRole(toDbRole(message.role()));
+        entity.setContent(message.text());
+        entity.setCreateTime(LocalDateTime.now());
+        return entity;
+    }
+
+    private static ChatMessage toMessage(ChatHistory record) {
+        String time = record.getCreateTime() == null
+                ? now()
+                : record.getCreateTime().toLocalTime().format(TIME_FORMATTER);
+        return new ChatMessage(toClientRole(record.getRole()), record.getContent(), time);
+    }
+
+    private static String toDbRole(String role) {
+        return "dj".equals(role) ? "assistant" : "user";
+    }
+
+    private static String toClientRole(String role) {
+        return "assistant".equals(role) ? "dj" : "user";
     }
 
     private static String buildReply(String content) {

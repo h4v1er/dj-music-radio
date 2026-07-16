@@ -5,10 +5,26 @@ server:
 spring:
   application:
     name: module-chat
+  datasource:
+    url: jdbc:mysql://localhost:3306/mall?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=utf-8
+    username: root
+    password:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      connection-timeout: 1000
+      initialization-fail-timeout: -1
   cloud:
     nacos:
       discovery:
         server-addr: localhost:8848
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
 
 # 天气 API（和风天气免费接口）
 weather:
