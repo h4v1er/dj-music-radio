@@ -1,0 +1,16 @@
+# ===== 👤队员A - 智能对话DJ模块 =====
+server:
+  port: 8081
+
+spring:
+  application:
+    name: module-chat
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+
+# 天气 API（和风天气免费接口）
+weather:
+  api-key: your_api_key_here
+  base-url: https://devapi.qweather.com/v7
