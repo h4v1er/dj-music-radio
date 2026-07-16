@@ -28,7 +28,7 @@
 - [x] 新增 `chat_history` 表脚本、`ChatHistory` 实体和 `ChatHistoryMapper`
 - [x] `module-chat` 接入 MyBatis Plus 和 MySQL 配置，`ChatService` 支持优先读写数据库、异常时内存降级
 - [x] 验证通过：`module-chat -am package -DskipTests`，Gateway REST/WS 对话接口正常返回，`/chat/history` 返回最近消息
-- [ ] 待确认：远端 MySQL `root` 密码未记录且空密码被拒绝，`chat_history.sql` 建表和重启后持久化读取需要确认数据库账号后补测
+- [x] 配置 `MYSQL_PASSWORD` 环境变量，执行 `chat_history.sql` 建表，验证重启 `module-chat` 后仍能从 MySQL 读回历史记录
 
 ## 第2天（日期：______）
 - [ ] 
