@@ -20,6 +20,7 @@
 | [架构设计.md](./架构设计.md) | 微服务架构图、技术选型、数据库表设计 → 答辩 PPT 引用 |
 | [API接口规范.md](./API接口规范.md) | 4 个模块的接口约定 → 前后端联调依据 |
 | [前端设计规范.md](./前端设计规范.md) | 颜色变量、面板样式、布局规则 → 保证界面风格统一 |
+| [module-music-runtime.md](./module-music-runtime.md) | 音乐中心额外依赖：网易云 API、DeepSeek、数据库初始化 |
 
 ---
 
@@ -38,6 +39,7 @@
 | module-rec | 8083 | `mvn spring-boot:run -pl module-rec` |
 | module-user | 8084 | `mvn spring-boot:run -pl module-user` |
 | VUE3 前端 | 5173 | `cd frontend && npm run dev` |
+| 网易云 API 代理 | 3000 | `powershell -ExecutionPolicy Bypass -File scripts/netease/start-netease-api.ps1` |
 
 > 详细配置步骤见 [组员开发手册.md](./组员开发手册.md) 第二步。
 

@@ -26,5 +26,8 @@ node_modules/
 dist/
 .env.local
 
+### Local runtime dependencies ###
+.runtime/
+
 ### Docker ###
 .env
