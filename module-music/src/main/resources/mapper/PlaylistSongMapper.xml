@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.example.music.mapper.PlaylistSongMapper">
+
+    <!-- 批量插入歌曲到歌单 -->
+    <insert id="batchInsert" parameterType="list">
+        INSERT INTO playlist_song (playlist_id, song_id, sort_order, added_at)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.playlistId}, #{item.songId}, #{item.sortOrder}, NOW())
+        </foreach>
+    </insert>
+
+    <!-- 获取歌单中最大的排序号 -->
+    <select id="selectMaxSortOrder" resultType="java.lang.Integer">
+        SELECT COALESCE(MAX(sort_order), 0)
+        FROM playlist_song
+        WHERE playlist_id = #{playlistId}
+    </select>
+
+</mapper>
