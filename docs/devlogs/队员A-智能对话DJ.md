@@ -30,6 +30,9 @@
 - [x] 验证通过：`module-chat -am package -DskipTests`，Gateway REST/WS 对话接口正常返回，`/chat/history` 返回最近消息
 - [x] 配置 `MYSQL_PASSWORD` 环境变量，执行 `chat_history.sql` 建表，验证重启 `module-chat` 后仍能从 MySQL 读回历史记录
 - [x] 优化 `ChatPanel.vue` 对话面板样式，调整左右消息气泡、连接状态、输入区和发送按钮
+- [x] 新增 `WeatherService`，支持通过 `QWEATHER_API_KEY` 接入和风天气城市查询和实时天气接口
+- [x] `WeatherWidget.vue` 增加加载态、失败态和刷新按钮；未配置天气 API key 时自动显示演示天气
+- [x] 验证通过：前端构建、`module-chat -am package -DskipTests`、Gateway `/chat/weather?city=北京` 返回演示降级数据
 
 ## 第2天（日期：______）
 - [ ] 
