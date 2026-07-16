@@ -2,11 +2,18 @@
 server:
   port: 8082
 
+# DeepSeek AI 情绪分析（不配置则回退到关键词匹配）
+deepseek:
+  api:
+    key: sk-512967b2b61c41b0b7169f553ba8e96a
+    url: https://api.deepseek.com/v1/chat/completions
+  model: deepseek-chat
+
 spring:
   application:
     name: module-music
   datasource:
-    url: jdbc:mysql://localhost:3306/mall?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=utf-8
+    url: jdbc:mysql://localhost:3306/dj_music_radio?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&characterEncoding=utf-8
     username: root
     password:
     driver-class-name: com.mysql.cj.jdbc.Driver

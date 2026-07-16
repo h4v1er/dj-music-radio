@@ -115,11 +115,11 @@ async function importFromUrl() {
     }))
     const content = JSON.stringify(songs)
     await api.importPlaylist(pl.name, content)
-    urlResult.value = `✅ 成功导入「${pl.name}」(${songs.length} 首)`
+    urlResult.value = `✅ 成功导入「${pl.name}」(${songs.length} 首)\n🎭 情绪分析任务已自动提交，分析完成后可在播放器中查看每首歌的情绪画像`
     setTimeout(() => {
       emit('imported')
       close()
-    }, 1500)
+    }, 2500)
   } catch (e) {
     urlResult.value = '❌ 导入失败: ' + (e.response?.data?.message || e.message)
   } finally {

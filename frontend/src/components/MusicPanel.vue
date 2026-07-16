@@ -10,6 +10,7 @@ import PlayerCore from './music/PlayerCore.vue'
 import SongList from './music/SongList.vue'
 import PlaylistPanel from './music/PlaylistPanel.vue'
 import LyricsPanel from './music/LyricsPanel.vue'
+import EmotionInfo from './music/EmotionInfo.vue'
 import ImportDialog from './music/ImportDialog.vue'
 
 // ── 连接状态 ──
@@ -20,6 +21,7 @@ const currentSong = ref(null)
 const playQueue = ref([])
 const playMode = ref('order')   // order | shuffle | repeat
 const showLyrics = ref(false)
+const showEmotion = ref(false)
 
 // ── UI 状态 ──
 const activeTab = ref('all')    // all | playlists | favorites | history
@@ -76,6 +78,8 @@ async function playSong(song) {
       const lyricData = lyricRes.data?.data
       if (lyricData?.lrc?.lyric) {
         song.lyric = lyricData.lrc.lyric
+        // 异步持久化歌词到后端（供情绪分析使用）
+        api.saveLyric(song.id, song.lyric).catch(() => {})
       }
       // 补封面（导入时可能为空）
       if (!song.coverUrl && song.sourceId) {
@@ -294,6 +298,8 @@ async function playNeteaseSong(song) {
     const lyricData = lyricRes.data?.data
     if (lyricData?.lrc?.lyric) {
       song.lyric = lyricData.lrc.lyric
+      // 异步持久化歌词到后端（供情绪分析使用）
+      api.saveLyric(song.id, song.lyric).catch(() => {})
     }
     // 补充封面（搜索时可能未获取到）
     if (detailRes && !song.coverUrl) {
@@ -323,6 +329,7 @@ onMounted(async () => {
       音乐中心
       <span class="title-actions">
         <button class="mini-btn" :class="{ active: showLyrics }" title="显示歌词" @click="showLyrics = !showLyrics">🎤</button>
+        <button class="mini-btn" :class="{ active: showEmotion }" title="情绪分析" @click="showEmotion = !showEmotion">🎭</button>
         <button class="mini-btn" :class="{ active: dragMode }" title="拖拽排序" @click="dragMode = !dragMode">↕</button>
         <button class="mini-btn" title="导入歌单" @click="importDialog?.open()">📥</button>
       </span>
@@ -336,7 +343,11 @@ onMounted(async () => {
                 @timeUpdate="onTimeUpdate" />
 
     <!-- 歌词面板 -->
-    <LyricsPanel v-if="showLyrics" :lyrics="currentSong?.lyric || ''" :currentTime="lyricsTime" />
+    <LyricsPanel v-if="showLyrics" :lyrics="currentSong?.lyric || ''" :currentTime="lyricsTime"
+                 :emotionTags="currentSong?.emotionTags || ''" />
+
+    <!-- 情绪画像面板 -->
+    <EmotionInfo v-if="showEmotion" :songId="currentSong?.id" :song="currentSong" />
 
     <!-- 标签切换 -->
     <div class="tab-bar">

@@ -1,10 +1,11 @@
 <script setup>
 /**
  * 歌曲列表组件
- * 功能：歌曲列表展示、搜索筛选、流派过滤、点击播放、右键菜单、拖拽排序
+ * 功能：歌曲列表展示、搜索筛选、流派过滤、点击播放、右键菜单、拖拽排序、情绪徽章
  */
 import { ref, computed, watch, onMounted } from 'vue'
 import api, { getCoverUrl } from '../../api/music'
+import EmotionTag from './EmotionTag.vue'
 
 const props = defineProps({
   songs: { type: Array, default: () => [] },
@@ -166,6 +167,7 @@ onMounted(async () => {
           <div class="song-title">{{ song.title }}</div>
           <div class="song-artist">{{ song.artist }} · {{ song.album || song.genre }}</div>
         </div>
+        <EmotionTag v-if="song.emotionTags" :emotion="song.emotionTags.split(',')[0]" size="sm" />
         <span class="song-duration">{{ fmtDuration(song.duration) }}</span>
         <button class="fav-btn" :class="{ faved: song._favorited }"
                 title="收藏" @click.stop="emit('favorite', song)">❤</button>

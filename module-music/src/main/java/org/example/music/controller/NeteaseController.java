@@ -33,12 +33,36 @@ public class NeteaseController {
         return Result.ok(resp != null ? resp.get("result") : null);
     }
 
-    /** 获取歌曲播放URL */
+    /** 获取歌曲播放URL — 多音质等级 fallback，尽可能获取完整歌曲 */
     @GetMapping("/url")
     public Result<Object> getUrl(@RequestParam String id) {
-        String url = NETEASE_API + "/song/url?id=" + id;
-        Map resp = rest.getForObject(url, Map.class);
-        return Result.ok(resp != null ? resp.get("data") : null);
+        // 从高到低尝试不同音质等级，取第一个返回有效 URL 的
+        String[] levels = {"lossless", "exhigh", "higher", "standard"};
+        for (String level : levels) {
+            try {
+                String url = NETEASE_API + "/song/url/v1?id=" + id + "&level=" + level;
+                Map resp = rest.getForObject(url, Map.class);
+                if (resp != null && resp.get("data") != null) {
+                    List<Map> data = (List<Map>) resp.get("data");
+                    if (data != null && !data.isEmpty()) {
+                        Object urlObj = data.get(0).get("url");
+                        if (urlObj != null && !urlObj.toString().isEmpty()) {
+                            return Result.ok(data);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // 该等级获取失败，继续尝试下一等级
+            }
+        }
+        // 所有等级都失败，回退到原始接口
+        try {
+            String url = NETEASE_API + "/song/url?id=" + id;
+            Map resp = rest.getForObject(url, Map.class);
+            return Result.ok(resp != null ? resp.get("data") : null);
+        } catch (Exception e) {
+            return Result.fail("无法获取播放地址");
+        }
     }
 
     /** 获取歌曲详情 */
@@ -55,6 +79,24 @@ public class NeteaseController {
         String url = NETEASE_API + "/lyric?id=" + id;
         Map resp = rest.getForObject(url, Map.class);
         return Result.ok(resp != null ? resp : null);
+    }
+
+    /** 批量获取歌词 — 导入时使用，减少网络往返 */
+    @GetMapping("/lyric/batch")
+    public Result<Map<String, Object>> batchLyric(@RequestParam String ids) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (String id : ids.split(",")) {
+            String trimmed = id.trim();
+            if (trimmed.isEmpty()) continue;
+            try {
+                String url = NETEASE_API + "/lyric?id=" + trimmed;
+                Map resp = rest.getForObject(url, Map.class);
+                result.put(trimmed, resp != null ? resp : null);
+            } catch (Exception e) {
+                result.put(trimmed, Map.of("error", e.getMessage()));
+            }
+        }
+        return Result.ok(result);
     }
 
     /**

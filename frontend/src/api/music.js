@@ -16,6 +16,10 @@ export default {
   search: (kw, page = 1, size = 20) =>
     musicApi.get('/song/search', { params: { kw, page, size } }),
   genres: () => musicApi.get('/song/genres'),
+  saveLyric: (id, lyric) =>
+    musicApi.put(`/song/${id}/lyric`, { lyric }),
+  analyzeSongEmotion: (id) =>
+    musicApi.post(`/song/${id}/analyze-emotion`),
 
   // ── 歌单 ──
   playlistList: (userId = 1) => musicApi.get('/playlist/list', { params: { userId } }),
@@ -57,6 +61,17 @@ export default {
   neteaseLyric: (id) => musicApi.get('/netease/lyric', { params: { id } }),
   neteasePing: () => musicApi.get('/netease/ping'),
   neteasePlaylist: (id) => musicApi.get('/netease/playlist', { params: { id } }),
+
+  // ── 情绪分析 ──
+  getSongEmotion: (songId) => musicApi.get(`/emotion/${songId}`),
+  analyzeSong: (songId) => musicApi.post(`/emotion/analyze/${songId}`),
+  batchAnalyze: (playlistId) => musicApi.post(`/emotion/batch/${playlistId}`),
+  searchByEmotion: (tag) => musicApi.get('/emotion/search', { params: { tag } }),
+  playlistEmotionOverview: (playlistId) => musicApi.get(`/emotion/playlist/${playlistId}/overview`),
+
+  // ── 用户品味 ──
+  getUserTaste: (userId = 1) => musicApi.get(`/taste/${userId}`),
+  refreshTaste: (userId = 1) => musicApi.get(`/taste/refresh/${userId}`),
 
   // ── 健康检查 ──
   hello: () => musicApi.get('/hello')
