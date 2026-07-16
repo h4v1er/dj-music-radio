@@ -203,20 +203,38 @@ async function searchNetease() {
     try {
       const res = await api.neteaseSearch(kw, 20)
       const songs = res.data?.data?.songs || []
+
+      // 搜索结果不含 picUrl，需要批量查详情获取封面
+      const songIds = songs.map(s => s.id)
+      let coverMap = {}
+      if (songIds.length > 0) {
+        try {
+          const detailRes = await api.neteaseDetail(songIds.join(','))
+          const detailSongs = detailRes.data?.data || []
+          detailSongs.forEach(s => {
+            const picUrl = (s.al || {}).picUrl || ''
+            if (picUrl) {
+              coverMap[s.id] = picUrl.startsWith('http://')
+                ? picUrl.replace('http://', 'https://')
+                : picUrl
+            }
+          })
+        } catch (e) { /* 降级：无封面不影响搜索 */ }
+      }
+
       neteaseResults.value = songs.map(s => {
-        // 网易云封面 URL 强制升级为 HTTPS
-        let rawUrl = (s.al || {}).picUrl || ''
-        if (rawUrl && rawUrl.startsWith('http://')) {
-          rawUrl = rawUrl.replace('http://', 'https://')
-        }
+        const picUrl = coverMap[s.id] || ''
+        // 搜索 API 返回 album 字段，详情 API 返回 al 字段
+        const albumName = (s.al || s.album || {}).name || ''
+        const artists = (s.ar || s.artists || []).map(a => a.name).join('/')
         return {
           id: s.id,
           title: s.name,
-          artist: (s.ar || []).map(a => a.name).join('/'),
-          album: (s.al || {}).name || '',
-          duration: Math.floor((s.dt || 0) / 1000),
+          artist: artists,
+          album: albumName,
+          duration: Math.floor((s.dt || s.duration || 0) / 1000),
           genre: '网易云',
-          coverUrl: rawUrl,
+          coverUrl: picUrl,
           _netease: true
         }
       })
@@ -227,10 +245,11 @@ async function searchNetease() {
 
 async function playNeteaseSong(song) {
   try {
-    // 并行获取播放URL和歌词
-    const [urlRes, lyricRes] = await Promise.all([
+    // 并行获取播放URL、歌词、详情（补充封面）
+    const [urlRes, lyricRes, detailRes] = await Promise.all([
       api.neteaseUrl(song.id),
-      api.neteaseLyric(song.id)
+      api.neteaseLyric(song.id),
+      song.coverUrl ? Promise.resolve(null) : api.neteaseDetail(String(song.id))
     ])
     // 设置播放URL
     const urlData = urlRes.data?.data
@@ -241,6 +260,14 @@ async function playNeteaseSong(song) {
     const lyricData = lyricRes.data?.data
     if (lyricData?.lrc?.lyric) {
       song.lyric = lyricData.lrc.lyric
+    }
+    // 补充封面（搜索时可能未获取到）
+    if (detailRes && !song.coverUrl) {
+      const detailSongs = detailRes.data?.data || []
+      if (detailSongs.length > 0) {
+        const picUrl = (detailSongs[0].al || {}).picUrl || ''
+        song.coverUrl = picUrl.startsWith('http://') ? picUrl.replace('http://', 'https://') : picUrl
+      }
     }
   } catch (e) { console.error('获取播放数据失败', e) }
   currentSong.value = song
