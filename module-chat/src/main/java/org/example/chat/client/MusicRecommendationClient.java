@@ -9,4 +9,7 @@ public interface MusicRecommendationClient {
 
     @GetMapping("/music/song/search")
     Object searchSongs(@RequestParam("kw") String keyword);
+
+    @GetMapping("/music/song/list")
+    Object listSongs(@RequestParam("page") int page, @RequestParam("size") int size);
 }

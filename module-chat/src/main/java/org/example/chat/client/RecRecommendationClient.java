@@ -9,4 +9,10 @@ public interface RecRecommendationClient {
 
     @GetMapping("/rec/daily")
     Object daily(@RequestParam("userId") Long userId);
+
+    @GetMapping("/rec/hot")
+    Object hot();
+
+    @GetMapping("/rec/preferences")
+    Object preferences(@RequestParam("userId") Long userId);
 }

@@ -8,8 +8,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -25,6 +25,7 @@ public class ChatService {
 
     private static final long DEFAULT_USER_ID = 1L;
     private static final int HISTORY_LIMIT = 10;
+    private static final int MAX_CANDIDATE_SONGS = 80;
     private static final long DB_RETRY_INTERVAL_MS = 30_000L;
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final Map<Long, Deque<ChatMessage>> HISTORIES = new ConcurrentHashMap<>();
@@ -52,14 +53,21 @@ public class ChatService {
         String content = normalize(safeRequest.content());
         List<ChatMessage> recentHistory = history(userId);
         ChatMessage userMessage = new ChatMessage("user", content, now());
-        DeepSeekChatClient.ChatIntent intent = deepSeekChatClient.analyzeIntent(content, recentHistory);
-        List<String> songs = recommendSongs(userId, content, intent);
-        String replyText = deepSeekChatClient.composeReply(content, intent, songs, recentHistory);
-        if (replyText.isBlank()) {
-            replyText = buildReply(content, intent);
-        }
-        ChatMessage reply = new ChatMessage("dj", replyText, now());
 
+        DeepSeekChatClient.ToolPlan plan = deepSeekChatClient.planToolUse(content, recentHistory);
+        List<SongCandidate> candidates = executeTools(userId, content, plan);
+        DeepSeekChatClient.AiReply aiReply = deepSeekChatClient.composeReply(content, plan, candidates, recentHistory);
+
+        List<String> songs = aiReply.songs();
+        if (songs.isEmpty() && plan.needTools() && !candidates.isEmpty() && aiReply.reply().isBlank()) {
+            songs = candidates.stream().limit(3).map(SongCandidate::label).toList();
+        }
+        String replyText = aiReply.reply();
+        if (replyText.isBlank()) {
+            replyText = buildFallbackReply(content, plan, candidates);
+        }
+
+        ChatMessage reply = new ChatMessage("dj", replyText, now());
         appendHistory(userId, userMessage);
         appendHistory(userId, reply);
 
@@ -89,6 +97,74 @@ public class ChatService {
             return List.of(new ChatMessage("dj", greeting() + "我是你的 DJ 助手，今天想听点什么？", now()));
         }
         return new ArrayList<>(history);
+    }
+
+    private List<SongCandidate> executeTools(long userId, String content, DeepSeekChatClient.ToolPlan plan) {
+        if (plan == null || !plan.needTools()) {
+            return List.of();
+        }
+
+        Map<String, SongCandidate> candidates = new LinkedHashMap<>();
+        List<String> tools = plan.tools().isEmpty() ? List.of("music.list") : plan.tools();
+        for (String tool : tools) {
+            if (candidates.size() >= MAX_CANDIDATE_SONGS) {
+                break;
+            }
+            try {
+                switch (tool) {
+                    case "music.search" -> collectSongCandidates(
+                            musicRecommendationClient.searchSongs(searchKeyword(content, plan)),
+                            candidates);
+                    case "music.list" -> collectSongCandidates(
+                            musicRecommendationClient.listSongs(1, Math.min(plan.limit(), MAX_CANDIDATE_SONGS)),
+                            candidates);
+                    case "rec.daily" -> collectSongCandidates(recRecommendationClient.daily(userId), candidates);
+                    case "rec.hot" -> collectSongCandidates(recRecommendationClient.hot(), candidates);
+                    case "rec.preferences" -> {
+                        // Preference tags are useful for planning, but they are not songs by themselves.
+                        recRecommendationClient.preferences(userId);
+                    }
+                    default -> {
+                        // Ignore unknown model-planned tools so the chat path stays resilient.
+                    }
+                }
+            } catch (Exception ignored) {
+                // A single tool failure should not break normal chat.
+            }
+        }
+
+        if (candidates.isEmpty()) {
+            try {
+                collectSongCandidates(musicRecommendationClient.listSongs(1, 50), candidates);
+            } catch (Exception ignored) {
+                // No local fake songs: an empty candidate pool should stay visible to the AI/fallback.
+            }
+        }
+
+        return candidates.values().stream().limit(MAX_CANDIDATE_SONGS).toList();
+    }
+
+    private static String searchKeyword(String content, DeepSeekChatClient.ToolPlan plan) {
+        if (plan != null && plan.keyword() != null && !plan.keyword().isBlank()) {
+            return plan.keyword();
+        }
+        return content;
+    }
+
+    private static String buildFallbackReply(
+            String content,
+            DeepSeekChatClient.ToolPlan plan,
+            List<SongCandidate> candidates) {
+        if (plan != null && plan.needTools()) {
+            if (candidates == null || candidates.isEmpty()) {
+                return "我理解你想找歌，但现在项目音乐服务没有返回可用歌曲。你可以换个关键词，或者先确认 music/rec 服务和歌库数据。";
+            }
+            return "我先从项目歌库里挑了几首真实可用的歌。等 AI 服务恢复后，我会再按你的语境细选。";
+        }
+        if (content.contains("什么模型") || content.contains("你是谁")) {
+            return "我是这个音乐电台里的 AI 助手，可以正常聊天，也可以在需要时读取项目里的音乐和推荐数据。";
+        }
+        return "我在，可以继续聊。需要音乐、推荐、故事或别的问题，都可以直接说。";
     }
 
     private void appendHistory(long userId, ChatMessage message) {
@@ -144,158 +220,94 @@ public class ChatService {
         return "assistant".equals(role) ? "dj" : "user";
     }
 
-    private static String buildReply(String content, DeepSeekChatClient.ChatIntent intent) {
-        if (intent != null && !intent.needRecommend()) {
-            String lower = content.toLowerCase(Locale.ROOT);
-            if (containsAny(lower, "故事", "讲吧", "继续")) {
-                return "可以，我接着讲。夜色落下来，一个人沿着安静的街往前走，耳边的风声像在提醒他：答案就在下一盏灯后面。";
-            }
-            return "我在。你可以继续跟我聊，也可以告诉我现在的心情，我再决定要不要给你配歌。";
-        }
-        if (intent != null && intent.hasMeaningfulTags()) {
-            String brief = intent.brief();
-            if (!brief.isBlank() && !brief.equals(content)) {
-                return "我听懂了，先按「" + brief + "」这个方向给你挑几首，节奏会尽量贴合你的状态。";
-            }
-        }
-
-        String lower = content.toLowerCase(Locale.ROOT);
-        if (containsAny(lower, "摇滚", "rock")) {
-            return "收到，给你切到摇滚模式。先来三首有力量感的歌，把节奏拉起来。";
-        }
-        if (containsAny(lower, "电子", "电音", "edm")) {
-            return "安排电子氛围。适合工作、写代码或者夜里放空，我先给你推三首。";
-        }
-        if (containsAny(lower, "舒缓", "放松", "睡前", "安静")) {
-            return "那就放慢一点。给你挑几首舒缓的歌，适合休息和整理心情。";
-        }
-        if (containsAny(lower, "推荐", "随便", "不知道")) {
-            return "没问题，我按当前时间和默认偏好给你先做一组推荐。";
-        }
-        return "我记下了。现在先按你的描述做一组音乐推荐，后面会继续根据播放和收藏调整。";
-    }
-
-    private List<String> recommendSongs(long userId, String content, DeepSeekChatClient.ChatIntent intent) {
-        if (intent != null && !intent.needRecommend()) {
-            return List.of();
-        }
-        List<String> remoteSongs = remoteRecommendSongs(userId, content, intent);
-        if (!remoteSongs.isEmpty()) {
-            return remoteSongs;
-        }
-        return localRecommendSongs(intent == null ? content : intent.searchKeyword(content));
-    }
-
-    private List<String> remoteRecommendSongs(long userId, String content, DeepSeekChatClient.ChatIntent intent) {
-        try {
-            if (shouldUseDailyRecommend(content, intent)) {
-                return extractSongNames(recRecommendationClient.daily(userId));
-            }
-            return extractSongNames(musicRecommendationClient.searchSongs(searchKeyword(content, intent)));
-        } catch (Exception e) {
-            return List.of();
-        }
-    }
-
-    private static List<String> localRecommendSongs(String content) {
-        String lower = content.toLowerCase(Locale.ROOT);
-        if (containsAny(lower, "摇滚", "rock")) {
-            return List.of("示例摇滚 01 - Aurora Band", "城市失眠 - Echo Road", "逆光电台 - The North");
-        }
-        if (containsAny(lower, "电子", "电音", "edm")) {
-            return List.of("Neon Drive - DJ Sample", "午夜合成器 - Metro Pulse", "蓝色频率 - Signal Lab");
-        }
-        if (containsAny(lower, "舒缓", "放松", "睡前", "安静")) {
-            return List.of("晚风练习曲 - Soft Lake", "雨后房间 - Quiet Room", "慢速星光 - Mellow Sky");
-        }
-        return List.of("今日开场 - DJ Radio", "晴天漫游 - Sample Artist", "低速公路 - Demo Band");
-    }
-
-    private static boolean shouldUseDailyRecommend(String content, DeepSeekChatClient.ChatIntent intent) {
-        String lower = content.toLowerCase(Locale.ROOT);
-        if (containsAny(lower, "推荐", "随便", "不知道", "今日", "daily")) {
-            return intent == null || !intent.hasSpecificMusicRequest();
-        }
-        return false;
-    }
-
-    private static String searchKeyword(String content, DeepSeekChatClient.ChatIntent intent) {
-        if (intent != null) {
-            return intent.searchKeyword(content);
-        }
-        if (containsAny(content.toLowerCase(Locale.ROOT), "摇滚", "rock")) {
-            return "摇滚";
-        }
-        if (containsAny(content.toLowerCase(Locale.ROOT), "电子", "电音", "edm")) {
-            return "电子";
-        }
-        if (containsAny(content.toLowerCase(Locale.ROOT), "舒缓", "放松", "睡前", "安静")) {
-            return "舒缓";
-        }
-        return content;
-    }
-
-    private static List<String> extractSongNames(Object body) {
-        List<String> songs = new ArrayList<>();
-        collectSongNames(body, songs);
-        return songs.stream().filter(song -> !song.isBlank()).limit(3).toList();
-    }
-
     @SuppressWarnings("unchecked")
-    private static void collectSongNames(Object value, List<String> songs) {
-        if (value == null || songs.size() >= 3) {
+    private static void collectSongCandidates(Object value, Map<String, SongCandidate> candidates) {
+        if (value == null || candidates.size() >= MAX_CANDIDATE_SONGS) {
             return;
         }
         if (value instanceof Collection<?> collection) {
             for (Object item : collection) {
-                collectSongNames(item, songs);
-                if (songs.size() >= 3) {
+                collectSongCandidates(item, candidates);
+                if (candidates.size() >= MAX_CANDIDATE_SONGS) {
                     return;
                 }
             }
             return;
         }
         if (value instanceof Map<?, ?> map) {
-            String song = formatSong((Map<String, Object>) map);
-            if (!song.isBlank()) {
-                songs.add(song);
+            SongCandidate song = toSongCandidate((Map<String, Object>) map);
+            if (song != null) {
+                candidates.putIfAbsent(song.key(), song);
                 return;
             }
             for (String key : List.of("data", "records", "list", "songs", "items")) {
-                collectSongNames(map.get(key), songs);
-                if (songs.size() >= 3) {
+                collectSongCandidates(map.get(key), candidates);
+                if (candidates.size() >= MAX_CANDIDATE_SONGS) {
                     return;
                 }
             }
         }
     }
 
-    private static String formatSong(Map<String, Object> map) {
+    private static SongCandidate toSongCandidate(Map<String, Object> map) {
         String title = firstText(map, "title", "name", "songName", "song");
         if (title.isBlank()) {
-            return "";
+            return null;
         }
-        String artist = firstText(map, "artist", "singer", "author");
-        return artist.isBlank() ? title : title + " - " + artist;
+        return new SongCandidate(
+                longValue(firstValue(map, "id", "songId", "song_id")),
+                title,
+                firstText(map, "artist", "singer", "author"),
+                firstText(map, "album", "albumName"),
+                firstText(map, "genre", "style"),
+                firstText(map, "emotionTags", "emotion_tags", "tags"),
+                intValue(firstValue(map, "playCount", "play_count", "score", "rank")),
+                firstText(map, "source"),
+                firstText(map, "reason")
+        );
     }
 
-    private static String firstText(Map<String, Object> map, String... keys) {
+    private static Object firstValue(Map<String, Object> map, String... keys) {
         for (String key : keys) {
             Object value = map.get(key);
             if (value != null && !value.toString().isBlank()) {
-                return value.toString().trim();
+                return value;
             }
         }
-        return "";
+        return null;
     }
 
-    private static boolean containsAny(String value, String... keywords) {
-        for (String keyword : keywords) {
-            if (value.contains(keyword)) {
-                return true;
+    private static String firstText(Map<String, Object> map, String... keys) {
+        Object value = firstValue(map, keys);
+        return value == null ? "" : value.toString().trim();
+    }
+
+    private static Long longValue(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value instanceof String text) {
+            try {
+                return Long.parseLong(text.trim());
+            } catch (NumberFormatException ignored) {
+                return null;
             }
         }
-        return false;
+        return null;
+    }
+
+    private static Integer intValue(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value instanceof String text) {
+            try {
+                return Integer.parseInt(text.trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 
     private static String normalize(String value) {
@@ -332,4 +344,47 @@ public class ChatService {
     public record ChatMessage(String role, String text, String time) {
     }
 
+    public record SongCandidate(
+            Long id,
+            String title,
+            String artist,
+            String album,
+            String genre,
+            String emotionTags,
+            Integer playCount,
+            String source,
+            String reason) {
+
+        public String key() {
+            if (id != null) {
+                return "id:" + id;
+            }
+            return (title + "||" + artist).toLowerCase();
+        }
+
+        public String label() {
+            return artist == null || artist.isBlank() ? title : title + " - " + artist;
+        }
+
+        public String brief() {
+            List<String> parts = new ArrayList<>();
+            parts.add(label());
+            if (genre != null && !genre.isBlank()) {
+                parts.add("genre=" + genre);
+            }
+            if (emotionTags != null && !emotionTags.isBlank()) {
+                parts.add("tags=" + emotionTags);
+            }
+            if (album != null && !album.isBlank()) {
+                parts.add("album=" + album);
+            }
+            if (reason != null && !reason.isBlank()) {
+                parts.add("reason=" + reason);
+            }
+            if (playCount != null) {
+                parts.add("score=" + playCount);
+            }
+            return String.join(" | ", parts);
+        }
+    }
 }
