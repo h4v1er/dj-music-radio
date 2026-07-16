@@ -24,20 +24,23 @@ public class DeepSeekChatClient {
     private static final Logger log = LoggerFactory.getLogger(DeepSeekChatClient.class);
 
     private static final String INTENT_SYSTEM_PROMPT = """
-            You are the intent parser for a Chinese DJ music radio app.
-            Read the user's message and return only one JSON object. Do not wrap it in markdown.
+            You are the intent parser for a Chinese AI chat and DJ music radio app.
+            Use the recent conversation when the user sends a short follow-up like "还有啥", "换一个", "继续", or "讲吧".
+            Return only one JSON object. Do not wrap it in markdown.
             Fields:
+            - chatMode: one of music, story, smalltalk, general
             - mood: user's emotion or desired vibe, empty string if unknown
             - scene: listening scene, empty string if unknown
             - genre: music genre, empty string if unknown
             - artist: requested artist, empty string if unknown
             - keyword: best short search keyword for a music search API
-            - needRecommend: true if the user wants songs or music suggestions
+            - needRecommend: true only if the user wants songs, playlists, music suggestions, similar songs, or more song recommendations
             - replyStyle: short Chinese style label for the DJ reply
+            For greetings, storytelling, explanations, and normal chat, needRecommend must be false.
             Keep keyword concise. Reply JSON only.
             """;
 
-    private static final String REPLY_SYSTEM_PROMPT = """
+    private static final String MUSIC_REPLY_SYSTEM_PROMPT = """
             You are a warm but concise Chinese radio DJ in a music app.
             Write one natural Chinese reply to the user.
             Rules:
@@ -45,6 +48,18 @@ public class DeepSeekChatClient {
             - Mention the user's mood, scene, genre, or artist when useful.
             - Keep it under 90 Chinese characters.
             - Do not output markdown or numbered lists.
+            """;
+
+    private static final String GENERAL_REPLY_SYSTEM_PROMPT = """
+            You are a natural Chinese AI companion inside a DJ music radio app.
+            You can chat normally, answer questions, tell short stories, and continue the user's previous request.
+            Rules:
+            - Do not force every answer back to music.
+            - If the user asks for a story, tell or continue the story directly.
+            - Avoid animal characters or animal-like names unless the user explicitly asks for them.
+            - If the user greets you, respond naturally and briefly.
+            - Keep replies friendly and under 160 Chinese characters unless a story continuation needs a little more room.
+            - Do not output markdown.
             """;
 
     @Value("${deepseek.api.key:}")
@@ -59,7 +74,7 @@ public class DeepSeekChatClient {
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public ChatIntent analyzeIntent(String userInput) {
+    public ChatIntent analyzeIntent(String userInput, List<ChatService.ChatMessage> history) {
         String normalizedInput = normalize(userInput, "recommend music");
         if (!isConfigured()) {
             return ChatIntent.empty(normalizedInput);
@@ -69,7 +84,7 @@ public class DeepSeekChatClient {
             String content = callDeepSeek(
                     List.of(
                             Map.of("role", "system", "content", INTENT_SYSTEM_PROMPT),
-                            Map.of("role", "user", "content", normalizedInput)
+                            Map.of("role", "user", "content", buildIntentPrompt(normalizedInput, history))
                     ),
                     0.2,
                     400,
@@ -82,6 +97,7 @@ public class DeepSeekChatClient {
             Map<String, Object> map = objectMapper.readValue(cleanJson(content), new TypeReference<>() {
             });
             ChatIntent intent = new ChatIntent(
+                    text(map, "chatMode"),
                     text(map, "mood"),
                     text(map, "scene"),
                     text(map, "genre"),
@@ -100,31 +116,49 @@ public class DeepSeekChatClient {
         }
     }
 
-    public String composeReply(String userInput, ChatIntent intent, List<String> songs) {
+    public String composeReply(
+            String userInput,
+            ChatIntent intent,
+            List<String> songs,
+            List<ChatService.ChatMessage> history) {
         if (!isConfigured()) {
             return "";
         }
         try {
             StringBuilder userPrompt = new StringBuilder();
+            userPrompt.append("Recent conversation:\n").append(formatHistory(history)).append('\n');
             userPrompt.append("User message: ").append(normalize(userInput, "")).append('\n');
             if (intent != null && intent.hasMeaningfulTags()) {
                 userPrompt.append("Parsed intent: ").append(intent.brief()).append('\n');
             }
-            userPrompt.append("Songs: ").append(formatSongs(songs)).append('\n');
+            if (intent != null && intent.needRecommend()) {
+                userPrompt.append("Songs from project services: ").append(formatSongs(songs)).append('\n');
+            }
 
             return callDeepSeek(
                     List.of(
-                            Map.of("role", "system", "content", REPLY_SYSTEM_PROMPT),
+                            Map.of("role", "system", "content", replySystemPrompt(intent)),
                             Map.of("role", "user", "content", userPrompt.toString())
                     ),
                     0.7,
-                    220,
+                    intent != null && intent.needRecommend() ? 260 : 500,
                     false
             ).trim();
         } catch (Exception e) {
             log.warn("DeepSeek reply generation failed: {}", e.getMessage());
             return "";
         }
+    }
+
+    private static String buildIntentPrompt(String userInput, List<ChatService.ChatMessage> history) {
+        return "Recent conversation:\n" + formatHistory(history) + "\nCurrent user message: " + userInput;
+    }
+
+    private static String replySystemPrompt(ChatIntent intent) {
+        if (intent != null && intent.needRecommend()) {
+            return MUSIC_REPLY_SYSTEM_PROMPT;
+        }
+        return GENERAL_REPLY_SYSTEM_PROMPT;
     }
 
     private String callDeepSeek(
@@ -178,7 +212,7 @@ public class DeepSeekChatClient {
 
     private static String formatSongs(List<String> songs) {
         if (songs == null || songs.isEmpty()) {
-            return "No songs found from the project services.";
+            return "No songs found from the project services. Do not invent song names; briefly ask for another style or keyword.";
         }
         StringBuilder builder = new StringBuilder();
         int limit = Math.min(3, songs.size());
@@ -189,6 +223,24 @@ public class DeepSeekChatClient {
             builder.append(songs.get(i));
         }
         return builder.toString();
+    }
+
+    private static String formatHistory(List<ChatService.ChatMessage> history) {
+        if (history == null || history.isEmpty()) {
+            return "(none)";
+        }
+        int start = Math.max(0, history.size() - 8);
+        StringBuilder builder = new StringBuilder();
+        for (int i = start; i < history.size(); i++) {
+            ChatService.ChatMessage message = history.get(i);
+            if (message == null || message.text() == null || message.text().isBlank()) {
+                continue;
+            }
+            String role = "dj".equals(message.role()) ? "assistant" : "user";
+            builder.append(role).append(": ").append(message.text().trim()).append('\n');
+        }
+        String result = builder.toString().trim();
+        return result.isBlank() ? "(none)" : result;
     }
 
     private static String cleanJson(String value) {
@@ -236,6 +288,7 @@ public class DeepSeekChatClient {
     }
 
     public record ChatIntent(
+            String chatMode,
             String mood,
             String scene,
             String genre,
@@ -245,7 +298,7 @@ public class DeepSeekChatClient {
             String replyStyle) {
 
         public static ChatIntent empty(String fallbackKeyword) {
-            return new ChatIntent("", "", "", "", normalize(fallbackKeyword, "recommend music"), true, "");
+            return new ChatIntent("music", "", "", "", "", normalize(fallbackKeyword, "recommend music"), true, "");
         }
 
         public String searchKeyword(String fallback) {
@@ -258,7 +311,7 @@ public class DeepSeekChatClient {
         }
 
         public boolean hasMeaningfulTags() {
-            return !joinNonBlank(mood, scene, genre, artist, keyword, replyStyle).isBlank();
+            return !joinNonBlank(chatMode, mood, scene, genre, artist, keyword, replyStyle).isBlank();
         }
 
         public boolean hasSpecificMusicRequest() {
@@ -266,7 +319,7 @@ public class DeepSeekChatClient {
         }
 
         public String brief() {
-            return joinNonBlank(mood, scene, genre, artist, keyword, replyStyle);
+            return joinNonBlank(chatMode, mood, scene, genre, artist, keyword, replyStyle);
         }
 
         private static String joinNonBlank(String... values) {

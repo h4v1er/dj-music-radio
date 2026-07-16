@@ -50,10 +50,11 @@ public class ChatService {
         ChatSendRequest safeRequest = request == null ? new ChatSendRequest(DEFAULT_USER_ID, "") : request;
         long userId = safeRequest.userId() == null ? DEFAULT_USER_ID : safeRequest.userId();
         String content = normalize(safeRequest.content());
+        List<ChatMessage> recentHistory = history(userId);
         ChatMessage userMessage = new ChatMessage("user", content, now());
-        DeepSeekChatClient.ChatIntent intent = deepSeekChatClient.analyzeIntent(content);
+        DeepSeekChatClient.ChatIntent intent = deepSeekChatClient.analyzeIntent(content, recentHistory);
         List<String> songs = recommendSongs(userId, content, intent);
-        String replyText = deepSeekChatClient.composeReply(content, intent, songs);
+        String replyText = deepSeekChatClient.composeReply(content, intent, songs, recentHistory);
         if (replyText.isBlank()) {
             replyText = buildReply(content, intent);
         }
@@ -144,6 +145,13 @@ public class ChatService {
     }
 
     private static String buildReply(String content, DeepSeekChatClient.ChatIntent intent) {
+        if (intent != null && !intent.needRecommend()) {
+            String lower = content.toLowerCase(Locale.ROOT);
+            if (containsAny(lower, "故事", "讲吧", "继续")) {
+                return "可以，我接着讲。夜色落下来，一个人沿着安静的街往前走，耳边的风声像在提醒他：答案就在下一盏灯后面。";
+            }
+            return "我在。你可以继续跟我聊，也可以告诉我现在的心情，我再决定要不要给你配歌。";
+        }
         if (intent != null && intent.hasMeaningfulTags()) {
             String brief = intent.brief();
             if (!brief.isBlank() && !brief.equals(content)) {
