@@ -1,6 +1,6 @@
 # 队员C 开发日志 — 每日推荐模块
 
-> 姓名：______  分支：`dev-rec`  后端：module-rec (:8083)
+> 姓名：l1nky777  分支：`dev-rec`  后端：module-rec (:8083)
 
 ---
 
@@ -14,8 +14,24 @@
 
 ---
 
-## 第1天（日期：______）
-- [ ] 
+## 第1天（日期：2026-07-16）
+- [x] 从 `master` 创建队员C开发分支 `dev-rec`
+- [x] 搭建 module-rec 后端框架，完成 `GET /rec/hello` 服务健康检查
+- [x] 完成 `GET /rec/hot` 热门榜单接口，Redis ZSET 反向排序返回 TOP10
+- [x] 完成 `POST /rec/behavior` 用户行为上报接口，行为计分（play+1/like+3/share+2）写库同步更新 Redis
+- [x] 完成 `GET /rec/similar?songId=` 相似歌曲推荐，四层策略（同流派→同歌手→行为协同过滤→空列表）
+- [x] 完成 `GET /rec/daily?userId=` 今日推荐查询接口
+- [x] 完成 `GET /rec/preferences?userId=` 用户偏好标签接口，从行为数据统计流派频次
+- [x] 新增 `MusicFeignClient` 通过 OpenFeign 调用 module-music，含 `MusicFeignFallback` 回退工厂
+- [x] 新增 `SongDTO` / `ResultDTO` 数据传输对象，匹配 API 规范
+- [x] 后端 enrich 热门榜单和每日推荐数据，Feign 补全歌曲标题歌手，失败自动降级
+- [x] `UserBehaviorMapper` 新增 `findSimilarByBehavior` 协同过滤 SQL
+- [x] 新增 `RecommendScheduler` 定时任务，`@Scheduled` 每天凌晨 2:00 生成当日推荐
+- [x] 新增 RabbitMQ 配置 `RabbitMQConfig` + `RecNotificationProducer`，推荐生成后发送通知消息
+- [x] `RecPanel.vue` 接入真实后端 API，热门榜单 / 今日推荐 / 偏好标签三态处理
+- [x] 创建数据库表 `user_behavior` 和 `daily_recommend`
+- [x] 安装并配置 Redis 3.0.504、Nacos 2.4.3、Erlang OTP + RabbitMQ Server 4.1.3
+- [x] 验证通过：Maven 编译成功，模块正常启动并注册到 Nacos，`/rec/hello` `/rec/hot` `/rec/preferences` 接口正常返回
 
 ## 第2天（日期：______）
 - [ ] 
