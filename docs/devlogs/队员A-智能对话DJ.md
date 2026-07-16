@@ -25,6 +25,10 @@
 - [x] 新增 `/chat/ws` WebSocket 端点，支持 `{ type, userId, content }` 消息并返回 `{ type, content, songs, time }`
 - [x] `ChatPanel.vue` 优先使用 WebSocket 实时对话，连接不可用时保留 REST 降级发送
 - [x] 验证通过：前端构建、完整 Maven 打包、Gateway WebSocket `ws://127.0.0.1:8080/chat/ws` 收发消息、前端 5173 可访问
+- [x] 新增 `chat_history` 表脚本、`ChatHistory` 实体和 `ChatHistoryMapper`
+- [x] `module-chat` 接入 MyBatis Plus 和 MySQL 配置，`ChatService` 支持优先读写数据库、异常时内存降级
+- [x] 验证通过：`module-chat -am package -DskipTests`，Gateway REST/WS 对话接口正常返回，`/chat/history` 返回最近消息
+- [ ] 待确认：远端 MySQL `root` 密码未记录且空密码被拒绝，`chat_history.sql` 建表和重启后持久化读取需要确认数据库账号后补测
 
 ## 第2天（日期：______）
 - [ ] 
