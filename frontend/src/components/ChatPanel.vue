@@ -4,7 +4,7 @@
  * 功能: AI对话 + WebSocket实时聊天 + DJ欢迎语(时段感知)
  * 后端: module-chat (:8081)
  */
-import { nextTick, onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { chatApi } from '../api/chat'
 
 const USER_ID = 1
@@ -14,6 +14,8 @@ const input = ref('')
 const sending = ref(false)
 const messages = ref([])
 const messagesRef = ref(null)
+let socket = null
+let replyTimer = null
 
 onMounted(async () => {
   try {
@@ -28,6 +30,15 @@ onMounted(async () => {
       { role: 'dj', text: 'DJ 服务暂时连不上，请稍后再试。', time: '' }
     ]
   }
+  connectSocket()
+})
+
+onBeforeUnmount(() => {
+  clearReplyTimer()
+  if (socket) {
+    socket.close()
+    socket = null
+  }
 })
 
 async function send() {
@@ -39,6 +50,58 @@ async function send() {
   sending.value = true
   await scrollToBottom()
 
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({ type: 'message', userId: USER_ID, content }))
+    startReplyTimer()
+    return
+  }
+
+  await sendByRest(content)
+}
+
+function connectSocket() {
+  try {
+    socket = chatApi.createSocket(USER_ID)
+    socket.onopen = () => {
+      connected.value = true
+    }
+    socket.onmessage = async (event) => {
+      const data = JSON.parse(event.data)
+      if (data.type === 'connected') {
+        connected.value = true
+        return
+      }
+      clearReplyTimer()
+      sending.value = false
+      if (data.type === 'reply') {
+        messages.value.push({
+          role: 'dj',
+          text: formatReply(data.content, data.songs || []),
+          time: data.time || '刚刚'
+        })
+      } else if (data.type === 'error') {
+        messages.value.push({
+          role: 'dj',
+          text: data.content || '刚才没有收到有效回复。',
+          time: '刚刚'
+        })
+      }
+      await scrollToBottom()
+    }
+    socket.onclose = () => {
+      connected.value = false
+      clearReplyTimer()
+      sending.value = false
+    }
+    socket.onerror = () => {
+      connected.value = false
+    }
+  } catch (e) {
+    connected.value = false
+  }
+}
+
+async function sendByRest(content) {
   try {
     const res = await chatApi.send({ userId: USER_ID, content })
     const reply = res.data.reply
@@ -59,6 +122,27 @@ async function send() {
   } finally {
     sending.value = false
     await scrollToBottom()
+  }
+}
+
+function startReplyTimer() {
+  clearReplyTimer()
+  replyTimer = window.setTimeout(async () => {
+    connected.value = false
+    sending.value = false
+    messages.value.push({
+      role: 'dj',
+      text: 'WebSocket 暂时没有响应，我稍后再帮你推荐。',
+      time: '刚刚'
+    })
+    await scrollToBottom()
+  }, 5000)
+}
+
+function clearReplyTimer() {
+  if (replyTimer) {
+    window.clearTimeout(replyTimer)
+    replyTimer = null
   }
 }
 
