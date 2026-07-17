@@ -42,10 +42,13 @@ public class PlaylistController {
 
     /** POST /music/playlist */
     @PostMapping
-    public Result<Playlist> create(@RequestBody Map<String, String> body) {
-        String name = body.get("name");
-        String description = body.getOrDefault("description", "");
-        Long userId = Long.valueOf(body.getOrDefault("userId", "1"));
+    public Result<Playlist> create(@RequestBody Map<String, Object> body) {
+        String name = stringValue(body.get("name"));
+        if (name == null || name.trim().isEmpty()) {
+            return Result.fail(400, "歌单名称不能为空");
+        }
+        String description = stringValue(body.getOrDefault("description", ""));
+        Long userId = longValue(body.get("userId"), 1L);
         return Result.ok(playlistService.createPlaylist(name, description, userId));
     }
 
@@ -101,5 +104,20 @@ public class PlaylistController {
     public Result<Map<String, String>> importStatus(@PathVariable String taskId) {
         // 简化实现：直接返回完成（实际可查Redis状态）
         return Result.ok(Map.of("taskId", taskId, "status", "completed"));
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private Long longValue(Object value, Long defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? defaultValue : Long.valueOf(text);
     }
 }

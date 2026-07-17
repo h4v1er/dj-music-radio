@@ -99,7 +99,9 @@ async function playSong(song) {
 
   currentSong.value = song
   // 记录播放历史
-  api.recordPlay(song.id).catch(() => {})
+  api.recordPlay(song.id)
+    .then(() => window.dispatchEvent(new CustomEvent('dj-user-library-changed', { detail: { type: 'history' } })))
+    .catch(() => {})
   // 检查收藏状态
   checkFavStatus(song)
   // 如果没在队列中，加入队列
@@ -151,6 +153,7 @@ async function toggleFavorite(song) {
       await api.addFavorite(song.id)
       song._favorited = true
     }
+    window.dispatchEvent(new CustomEvent('dj-user-library-changed', { detail: { type: 'favorite' } }))
     if (activeTab.value === 'favorites') await loadFavorites()
   } catch (e) { console.error('收藏操作失败', e) }
 }

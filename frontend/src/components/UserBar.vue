@@ -4,7 +4,7 @@
  * 功能: 真实登录注册 + JWT 会话 + 收藏/历史联动 music 模块
  * 后端: module-user (:8084)
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { clearUserSession, getCurrentUser, saveUserSession, userApi } from '../api/user'
 
@@ -41,6 +41,12 @@ onMounted(async () => {
     loggedIn.value = true
     refreshUserInfo()
   }
+
+  window.addEventListener('dj-user-library-changed', handleLibraryChanged)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('dj-user-library-changed', handleLibraryChanged)
 })
 
 async function refreshUserInfo() {
@@ -112,6 +118,22 @@ async function handleRegister() {
 
 function logout() {
   clearSession(true)
+}
+
+function handleUserCommand(command) {
+  const actions = {
+    favorites: loadFavorites,
+    history: loadHistory,
+    password: openPasswordDialog,
+    logout
+  }
+  actions[command]?.()
+}
+
+async function handleLibraryChanged() {
+  if (!loggedIn.value) return
+  if (showFavorite.value) await loadFavorites()
+  if (showHistory.value) await loadHistory()
 }
 
 function openPasswordDialog() {
@@ -224,12 +246,17 @@ function playSong(song) {
 
     <div class="right">
       <el-button v-if="!loggedIn" size="small" type="primary" plain @click="showLogin = true">登录 / 注册</el-button>
-      <template v-else>
-        <el-button size="small" plain @click="loadFavorites">❤ 收藏</el-button>
-        <el-button size="small" plain @click="loadHistory">历史</el-button>
-        <el-button size="small" plain @click="openPasswordDialog">修改密码</el-button>
-        <el-button size="small" plain @click="logout">退出</el-button>
-      </template>
+      <el-dropdown v-else trigger="hover" placement="top-end" @command="handleUserCommand">
+        <el-button size="small" plain class="account-menu-btn">账户操作</el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="favorites">❤ 我的收藏</el-dropdown-item>
+            <el-dropdown-item command="history">播放历史</el-dropdown-item>
+            <el-dropdown-item command="password">修改密码</el-dropdown-item>
+            <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
     </div>
 
     <el-dialog v-model="showLogin" :title="isRegister ? '注册' : '登录'" width="380px">
@@ -324,6 +351,7 @@ function playSong(song) {
 .dot { width: 7px; height: 7px; border-radius: 50%; }
 .divider { color: var(--color-border); }
 .username { color: var(--color-text); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-menu-btn { min-width: 86px; }
 .dialog-actions { display: flex; justify-content: space-between; align-items: center; }
 .empty-state {
   color: var(--color-text-muted);

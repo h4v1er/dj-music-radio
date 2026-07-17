@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -32,6 +33,7 @@ public class RecServiceImpl extends ServiceImpl<DailyRecommendMapper, DailyRecom
     private StringRedisTemplate redisTemplate;
     @Autowired(required = false)
     private MusicFeignClient musicFeignClient;
+    private final RestTemplate restTemplate = new RestTemplate();
 
     // ============ 热门榜单 ============
     @Override
@@ -84,20 +86,12 @@ public class RecServiceImpl extends ServiceImpl<DailyRecommendMapper, DailyRecom
      * 若音乐服务不可用，至少保留 songId，前端可降级展示
      */
     private void enrichSongInfo(Map<String, Object> item, Integer songId) {
-        if (musicFeignClient == null) {
-            item.putIfAbsent("title", "歌曲#" + songId);
-            item.putIfAbsent("artist", "未知歌手");
+        SongDTO song = findSongById(songId);
+        if (song != null) {
+            item.put("title", song.getTitle());
+            item.put("artist", song.getArtist());
             return;
         }
-        try {
-            ResultDTO<SongDTO> r = musicFeignClient.getSongById(songId);
-            if (r != null && r.isSuccess() && r.getData() != null) {
-                item.put("title", r.getData().getTitle());
-                item.put("artist", r.getData().getArtist());
-                return;
-            }
-        } catch (Exception ignored) { }
-        // 回退
         item.putIfAbsent("title", "歌曲#" + songId);
         item.putIfAbsent("artist", "未知歌手");
     }
@@ -147,14 +141,8 @@ public class RecServiceImpl extends ServiceImpl<DailyRecommendMapper, DailyRecom
 
     /** 通过 Feign 获取歌曲流派 */
     private String getSongGenre(Integer songId) {
-        if (musicFeignClient == null) return null;
-        try {
-            ResultDTO<SongDTO> r = musicFeignClient.getSongById(songId);
-            if (r != null && r.isSuccess() && r.getData() != null) {
-                return r.getData().getGenre();
-            }
-        } catch (Exception ignored) { }
-        return null;
+        SongDTO song = findSongById(songId);
+        return song == null ? null : song.getGenre();
     }
 
     // ============ 相似歌曲 ============
@@ -164,16 +152,10 @@ public class RecServiceImpl extends ServiceImpl<DailyRecommendMapper, DailyRecom
         // 第一步: 尝试通过 Feign 从音乐服务获取歌曲流派和歌手信息
         String genre = null;
         String artist = null;
-        if (musicFeignClient != null) {
-            try {
-                ResultDTO<SongDTO> r = musicFeignClient.getSongById(songId);
-                if (r != null && r.isSuccess() && r.getData() != null) {
-                    genre = r.getData().getGenre();
-                    artist = r.getData().getArtist();
-                }
-            } catch (Exception ignored) {
-                // 音乐服务不可用，后面走回退
-            }
+        SongDTO sourceSong = findSongById(songId);
+        if (sourceSong != null) {
+            genre = sourceSong.getGenre();
+            artist = sourceSong.getArtist();
         }
 
         // 第二步: 优先按流派搜索同风格歌曲
@@ -195,9 +177,9 @@ public class RecServiceImpl extends ServiceImpl<DailyRecommendMapper, DailyRecom
     /** 按流派搜索同风格歌曲 */
     private List<Map<String, Object>> searchByGenre(Integer songId, String genre) {
         try {
-            ResultDTO<List<SongDTO>> r = musicFeignClient.searchSongs(genre);
-            if (r != null && r.isSuccess() && r.getData() != null) {
-                return r.getData().stream()
+            List<SongDTO> songs = findSongsByKeyword(genre);
+            if (!songs.isEmpty()) {
+                return songs.stream()
                         .filter(s -> !s.getId().equals(songId))   // 排除自己
                         .limit(10)
                         .map(s -> {
@@ -217,9 +199,9 @@ public class RecServiceImpl extends ServiceImpl<DailyRecommendMapper, DailyRecom
     /** 按歌手搜索同风格歌曲 */
     private List<Map<String, Object>> searchByArtist(Integer songId, String artist) {
         try {
-            ResultDTO<List<SongDTO>> r = musicFeignClient.searchSongs(artist);
-            if (r != null && r.isSuccess() && r.getData() != null) {
-                return r.getData().stream()
+            List<SongDTO> songs = findSongsByKeyword(artist);
+            if (!songs.isEmpty()) {
+                return songs.stream()
                         .filter(s -> !s.getId().equals(songId))
                         .limit(10)
                         .map(s -> {
@@ -245,8 +227,10 @@ public class RecServiceImpl extends ServiceImpl<DailyRecommendMapper, DailyRecom
         List<Map<String, Object>> result = new ArrayList<>();
         for (Map<String, Object> row : rows) {
             Map<String, Object> item = new LinkedHashMap<>();
-            item.put("songId", row.get("song_id"));
+            Integer recommendedSongId = toInteger(row.get("song_id"));
+            item.put("songId", recommendedSongId);
             item.put("reason", "和你口味相似的人也喜欢这首歌");
+            enrichSongInfo(item, recommendedSongId);
             result.add(item);
         }
         return result;
@@ -270,5 +254,89 @@ public class RecServiceImpl extends ServiceImpl<DailyRecommendMapper, DailyRecom
             String songIdStr = String.valueOf(behavior.getSongId());
             redisTemplate.opsForZSet().incrementScore(REDIS_HOT_KEY, songIdStr, scoreIncr);
         }
+    }
+
+    private SongDTO findSongById(Integer songId) {
+        if (songId == null) {
+            return null;
+        }
+        if (musicFeignClient != null) {
+            try {
+                ResultDTO<SongDTO> r = musicFeignClient.getSongById(songId);
+                if (r != null && r.isSuccess() && r.getData() != null) {
+                    return r.getData();
+                }
+            } catch (Exception ignored) { }
+        }
+        try {
+            Map<?, ?> response = restTemplate.getForObject(
+                    "http://127.0.0.1:8082/music/song/{id}",
+                    Map.class,
+                    songId
+            );
+            Object data = response == null ? null : response.get("data");
+            if (data instanceof Map<?, ?> map) {
+                return toSongDTO(map);
+            }
+        } catch (Exception ignored) { }
+        return null;
+    }
+
+    private List<SongDTO> findSongsByKeyword(String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return Collections.emptyList();
+        }
+        if (musicFeignClient != null) {
+            try {
+                ResultDTO<List<SongDTO>> r = musicFeignClient.searchSongs(keyword);
+                if (r != null && r.isSuccess() && r.getData() != null) {
+                    return r.getData();
+                }
+            } catch (Exception ignored) { }
+        }
+        try {
+            Map<?, ?> response = restTemplate.getForObject(
+                    "http://127.0.0.1:8082/music/song/search?kw={keyword}&page=1&size=20",
+                    Map.class,
+                    keyword
+            );
+            Object data = response == null ? null : response.get("data");
+            if (data instanceof Map<?, ?> page) {
+                Object records = page.get("records");
+                if (records instanceof List<?> list) {
+                    return list.stream()
+                            .filter(Map.class::isInstance)
+                            .map(item -> toSongDTO((Map<?, ?>) item))
+                            .toList();
+                }
+            }
+        } catch (Exception ignored) { }
+        return Collections.emptyList();
+    }
+
+    private SongDTO toSongDTO(Map<?, ?> map) {
+        SongDTO dto = new SongDTO();
+        dto.setId(toInteger(map.get("id")));
+        dto.setTitle(stringValue(map.get("title")));
+        dto.setArtist(stringValue(map.get("artist")));
+        dto.setAlbum(stringValue(map.get("album")));
+        dto.setCoverUrl(stringValue(map.get("coverUrl")));
+        dto.setGenre(stringValue(map.get("genre")));
+        dto.setDuration(toInteger(map.get("duration")));
+        return dto;
+    }
+
+    private Integer toInteger(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        return Integer.valueOf(String.valueOf(value));
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 }
