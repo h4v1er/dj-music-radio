@@ -308,6 +308,7 @@
 | `POST` | `/user/login` | 登录并返回 token |
 | `GET` | `/user/info` | 查询当前用户，需要 `Authorization: Bearer <token>` |
 | `PUT` | `/user/info` | 更新当前用户资料，需要 token |
+| `PUT` | `/user/password` | 修改当前用户密码，需要 token，body: `{ "oldPassword": "...", "newPassword": "..." }` |
 | `GET` | `/user/favorite/list` | 查询当前用户收藏，内部调用 music |
 | `POST` | `/user/favorite/{songId}` | 添加收藏，内部调用 music |
 | `POST` | `/user/favorite/add?songId=1` | 添加收藏兼容接口 |

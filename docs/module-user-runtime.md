@@ -9,6 +9,7 @@
 - `POST /user/login` 用户登录并返回 JWT；
 - `GET /user/info` 根据 Authorization token 查询当前用户；
 - `PUT /user/info` 更新当前用户昵称、头像、手机号、邮箱等资料；
+- `PUT /user/password` 校验原密码后修改当前用户密码；
 - `GET /user/favorite/list` 查询当前用户收藏歌曲；
 - `POST /user/favorite/{songId}` / `POST /user/favorite/add?songId=` 添加收藏；
 - `DELETE /user/favorite/{songId}` 取消收藏；
@@ -91,6 +92,15 @@ $token = $login.data.token
 ```powershell
 Invoke-RestMethod "http://127.0.0.1:8080/user/info" `
   -Headers @{ Authorization = "Bearer $token" }
+```
+
+修改密码：
+
+```powershell
+Invoke-RestMethod -Method Put "http://127.0.0.1:8080/user/password" `
+  -Headers @{ Authorization = "Bearer $token" } `
+  -ContentType "application/json" `
+  -Body '{"oldPassword":"test123456","newPassword":"newpass123"}'
 ```
 
 查收藏和历史：

@@ -61,6 +61,7 @@ export const userApi = {
   login: (data) => api.post('/user/login', data),
   info: () => api.get('/user/info', authConfig()),
   updateInfo: (data) => api.put('/user/info', data, authConfig()),
+  changePassword: (data) => api.put('/user/password', data, authConfig()),
   addFavorite: (songId) => api.post(`/user/favorite/${songId}`, null, authConfig()),
   removeFavorite: (songId) => api.delete(`/user/favorite/${songId}`, authConfig()),
   favoriteList: () => api.get('/user/favorite/list', authConfig()),

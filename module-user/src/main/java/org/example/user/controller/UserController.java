@@ -2,6 +2,7 @@ package org.example.user.controller;
 
 import org.example.user.common.Result;
 import org.example.user.dto.LoginDTO;
+import org.example.user.dto.PasswordDTO;
 import org.example.user.dto.RegisterDTO;
 import org.example.user.entity.User;
 import org.example.user.service.MusicLibraryService;
@@ -80,6 +81,17 @@ public class UserController {
             return userService.updateUser(user) ? Result.success() : Result.error("更新失败");
         } catch (RuntimeException e) {
             return Result.error(401, e.getMessage());
+        }
+    }
+
+    @PutMapping("/password")
+    public Result<?> changePassword(@RequestHeader(value = "Authorization", required = false) String token,
+                                    @RequestBody PasswordDTO dto) {
+        try {
+            Long userId = userService.authenticate(token);
+            return userService.changePassword(userId, dto) ? Result.success() : Result.error("修改密码失败");
+        } catch (RuntimeException e) {
+            return Result.error(400, e.getMessage());
         }
     }
 

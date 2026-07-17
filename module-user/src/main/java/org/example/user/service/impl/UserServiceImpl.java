@@ -3,6 +3,7 @@ package org.example.user.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.example.user.dto.LoginDTO;
+import org.example.user.dto.PasswordDTO;
 import org.example.user.dto.RegisterDTO;
 import org.example.user.entity.User;
 import org.example.user.mapper.UserMapper;
@@ -77,6 +78,21 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     @Override
+    public boolean changePassword(Long userId, PasswordDTO dto) {
+        validatePasswordChange(dto);
+        User user = getById(userId);
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+        if (!passwordEncoder.matches(dto.getOldPassword(), user.getPasswordHash())) {
+            throw new RuntimeException("原密码错误");
+        }
+        user.setPasswordHash(passwordEncoder.encode(dto.getNewPassword()));
+        user.setUpdateTime(LocalDateTime.now());
+        return updateById(user);
+    }
+
+    @Override
     public Long authenticate(String authorizationHeader) {
         if (isBlank(authorizationHeader)) {
             throw new RuntimeException("未登录");
@@ -108,6 +124,18 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
         if (dto.getPassword().length() < 6) {
             throw new RuntimeException("密码至少 6 个字符");
+        }
+    }
+
+    private void validatePasswordChange(PasswordDTO dto) {
+        if (dto == null || isBlank(dto.getOldPassword()) || isBlank(dto.getNewPassword())) {
+            throw new RuntimeException("原密码和新密码不能为空");
+        }
+        if (dto.getNewPassword().length() < 6) {
+            throw new RuntimeException("新密码至少 6 个字符");
+        }
+        if (dto.getOldPassword().equals(dto.getNewPassword())) {
+            throw new RuntimeException("新密码不能和原密码相同");
         }
     }
 

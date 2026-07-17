@@ -13,14 +13,17 @@ const loggedIn = ref(false)
 const showLogin = ref(false)
 const showFavorite = ref(false)
 const showHistory = ref(false)
+const showPassword = ref(false)
 const isRegister = ref(false)
 const loading = ref(false)
+const passwordLoading = ref(false)
 const user = ref(null)
 const favorites = ref([])
 const histories = ref([])
 
 const loginForm = ref({ username: '', password: '' })
 const registerForm = ref({ username: '', password: '', nickname: '', phone: '', email: '' })
+const passwordForm = ref({ oldPassword: '', newPassword: '', confirmPassword: '' })
 
 const displayName = computed(() => user.value?.nickname || user.value?.username || '未登录')
 
@@ -111,6 +114,44 @@ function logout() {
   clearSession(true)
 }
 
+function openPasswordDialog() {
+  passwordForm.value = { oldPassword: '', newPassword: '', confirmPassword: '' }
+  showPassword.value = true
+}
+
+async function handleChangePassword() {
+  if (!passwordForm.value.oldPassword || !passwordForm.value.newPassword || !passwordForm.value.confirmPassword) {
+    ElMessage.warning('请完整填写密码')
+    return
+  }
+  if (passwordForm.value.newPassword.length < 6) {
+    ElMessage.warning('新密码至少 6 个字符')
+    return
+  }
+  if (passwordForm.value.newPassword !== passwordForm.value.confirmPassword) {
+    ElMessage.warning('两次输入的新密码不一致')
+    return
+  }
+  passwordLoading.value = true
+  try {
+    const res = await userApi.changePassword({
+      oldPassword: passwordForm.value.oldPassword,
+      newPassword: passwordForm.value.newPassword
+    })
+    if (res.data?.code === 200) {
+      showPassword.value = false
+      passwordForm.value = { oldPassword: '', newPassword: '', confirmPassword: '' }
+      ElMessage.success('密码已修改')
+    } else {
+      ElMessage.error(res.data?.message || '修改密码失败')
+    }
+  } catch (e) {
+    ElMessage.error('修改密码请求失败')
+  } finally {
+    passwordLoading.value = false
+  }
+}
+
 function clearSession(showMessage) {
   clearUserSession()
   user.value = null
@@ -186,6 +227,7 @@ function playSong(song) {
       <template v-else>
         <el-button size="small" plain @click="loadFavorites">❤ 收藏</el-button>
         <el-button size="small" plain @click="loadHistory">历史</el-button>
+        <el-button size="small" plain @click="openPasswordDialog">修改密码</el-button>
         <el-button size="small" plain @click="logout">退出</el-button>
       </template>
     </div>
@@ -236,6 +278,35 @@ function playSong(song) {
         <span class="song-title">{{ song.title || '未知歌曲' }}</span>
         <span class="song-sub">{{ song.artist || '未知歌手' }}</span>
       </button>
+    </el-dialog>
+
+    <el-dialog v-model="showPassword" title="修改密码" width="380px">
+      <el-input
+        v-model="passwordForm.oldPassword"
+        placeholder="原密码"
+        type="password"
+        show-password
+        style="margin-bottom:10px"
+      />
+      <el-input
+        v-model="passwordForm.newPassword"
+        placeholder="新密码，至少 6 个字符"
+        type="password"
+        show-password
+        style="margin-bottom:10px"
+      />
+      <el-input
+        v-model="passwordForm.confirmPassword"
+        placeholder="确认新密码"
+        type="password"
+        show-password
+        style="margin-bottom:16px"
+        @keyup.enter="handleChangePassword"
+      />
+      <div class="dialog-actions">
+        <el-button @click="showPassword = false">取消</el-button>
+        <el-button type="primary" :loading="passwordLoading" @click="handleChangePassword">保存</el-button>
+      </div>
     </el-dialog>
   </footer>
 </template>
