@@ -1,10 +1,13 @@
 <script setup>
+import { ref } from 'vue'
 import ChatPanel from './components/ChatPanel.vue'
 import MusicPanel from './components/MusicPanel.vue'
 import RecPanel from './components/RecPanel.vue'
 import TimeWidget from './components/TimeWidget.vue'
 import UserBar from './components/UserBar.vue'
 import WeatherWidget from './components/WeatherWidget.vue'
+
+const chatExpanded = ref(false)
 </script>
 
 <template>
@@ -21,16 +24,18 @@ import WeatherWidget from './components/WeatherWidget.vue'
     </header>
 
     <!-- 主区域：三栏面板 + 可拖拽调整 -->
-    <div class="main-area">
+    <div class="main-area" :class="{ 'chat-expanded': chatExpanded }">
 
       <!-- 左侧：AI 对话面板  队员A -->
-      <ChatPanel />
+      <ChatPanel :expanded="chatExpanded" @toggleExpand="chatExpanded = !chatExpanded" />
 
-      <!-- 中间：音乐播放器    队员B -->
-      <MusicPanel />
+      <div class="side-panels">
+        <!-- 中间：音乐播放器    队员B -->
+        <MusicPanel />
 
-      <!-- 右侧：推荐面板      队员C -->
-      <RecPanel />
+        <!-- 右侧：推荐面板      队员C -->
+        <RecPanel />
+      </div>
 
     </div>
 
@@ -78,11 +83,37 @@ import WeatherWidget from './components/WeatherWidget.vue'
   min-height: 0;
 }
 
+.side-panels { display: contents; }
+
+.main-area.chat-expanded {
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+
+.main-area.chat-expanded .side-panels {
+  display: grid;
+  grid-template-rows: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: var(--gap-sm);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.main-area.chat-expanded :deep(.music-panel),
+.main-area.chat-expanded :deep(.rec-panel) {
+  max-height: none;
+  min-height: 0;
+}
+
 /* ---- 响应式：小屏时堆叠 ---- */
 @media (max-width: 1000px) {
   .main-area {
     grid-template-columns: 1fr;
     overflow-y: auto;
+  }
+
+  .side-panels,
+  .main-area.chat-expanded .side-panels {
+    display: grid;
+    gap: var(--gap-sm);
   }
 }
 </style>

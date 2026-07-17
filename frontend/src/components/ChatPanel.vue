@@ -13,6 +13,12 @@ const WEATHER_CITY_STORAGE_KEY = 'dj-weather-city'
 const WEATHER_LOCATION_STORAGE_KEY = 'dj-weather-location'
 const GEOLOCATION_TIMEOUT = 5000
 
+defineProps({
+  expanded: { type: Boolean, default: false }
+})
+
+const emit = defineEmits(['toggleExpand'])
+
 const connected = ref(false)
 const input = ref('')
 const sending = ref(false)
@@ -363,6 +369,9 @@ async function scrollToBottom() {
         <el-icon><Connection /></el-icon>
         {{ connected ? '实时' : '离线' }}
       </span>
+      <button class="expand-btn" :title="expanded ? '还原布局' : '放大聊天'" @click="emit('toggleExpand')">
+        {{ expanded ? '还原' : '放大' }}
+      </button>
     </div>
 
     <!-- 消息区 -->
@@ -491,6 +500,24 @@ async function scrollToBottom() {
   color: var(--color-text-dim);
 }
 
+.expand-btn {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.expand-btn:hover {
+  border-color: var(--color-info);
+  color: var(--color-text);
+  background: rgba(15, 155, 255, 0.08);
+}
+
 .messages {
   flex: 1;
   overflow-y: auto;
@@ -530,7 +557,7 @@ async function scrollToBottom() {
 }
 
 .bubble {
-  max-width: calc(100% - 44px);
+  max-width: min(720px, calc(100% - 44px));
   padding: 10px 12px;
   border-radius: 12px 12px 12px 4px;
   background: rgba(233, 69, 96, 0.11);
