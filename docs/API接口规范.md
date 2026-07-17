@@ -28,8 +28,15 @@
 {
   "type": "message",
   "userId": 1,
-  "content": "根据今天的天气推荐几首歌",
-  "city": "威海市"
+  "content": "根据我这里天气推荐几首歌",
+  "context": {
+    "location": {
+      "city": "威海市",
+      "latitude": 37.5,
+      "longitude": 122.1,
+      "source": "browser_geolocation"
+    }
+  }
 }
 
 // 服务端 → 客户端
@@ -38,6 +45,19 @@
   "content": "好的，为你推荐以下歌曲...",
   "songs": [...],
   "selectedSongs": [...]
+}
+
+// 服务端 → 客户端：请求前端执行客户端工具
+{
+  "type": "tool_request",
+  "content": "我现在在哪啊",
+  "clientToolRequests": [
+    {
+      "id": "location-current",
+      "name": "location.current",
+      "purpose": "获取浏览器当前位置"
+    }
+  ]
 }
 ```
 
@@ -49,11 +69,18 @@
 {
   "userId": 1,
   "content": "我这里天气怎么样",
-  "city": "威海市"
+  "context": {
+    "location": {
+      "city": "威海市",
+      "latitude": 37.5,
+      "longitude": 122.1,
+      "source": "browser_geolocation"
+    }
+  }
 }
 ```
 
-`city` 为可选字段。前端会优先传顶部天气组件定位到的城市；用户消息未指定城市时，后端会使用该城市或最近对话里的天气城市继续回答。
+`context.location` 为可选上下文。没有该上下文但 AI 规划需要当前位置时，WebSocket 会返回 `tool_request(location.current)`，由前端执行浏览器定位后带着工具结果再次发送原消息。
 
 ### 天气响应格式
 

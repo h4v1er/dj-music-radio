@@ -10,6 +10,8 @@ import { chatApi } from '../api/chat'
 
 const USER_ID = 1
 const WEATHER_CITY_STORAGE_KEY = 'dj-weather-city'
+const WEATHER_LOCATION_STORAGE_KEY = 'dj-weather-location'
+const GEOLOCATION_TIMEOUT = 5000
 
 const connected = ref(false)
 const input = ref('')
@@ -53,7 +55,7 @@ async function send() {
   await scrollToBottom()
 
   if (socket && socket.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify({ type: 'message', userId: USER_ID, content, city: currentWeatherCity() }))
+    socket.send(JSON.stringify({ type: 'message', userId: USER_ID, content, context: currentChatContext() }))
     startReplyTimer()
     return
   }
@@ -74,6 +76,10 @@ function connectSocket() {
         return
       }
       clearReplyTimer()
+      if (data.type === 'tool_request') {
+        await handleToolRequest(data)
+        return
+      }
       sending.value = false
       if (data.type === 'reply') {
         messages.value.push({
@@ -104,17 +110,114 @@ function connectSocket() {
   }
 }
 
-async function sendByRest(content) {
+function pushRestReply(data) {
+  const reply = data.reply
+  const songs = data.songs || []
+  messages.value.push({
+    role: reply.role || 'dj',
+    text: reply.text,
+    songs: normalizeSongItems(data.selectedSongs, songs),
+    time: reply.time || '刚刚'
+  })
+}
+
+async function handleToolRequest(data) {
   try {
-    const res = await chatApi.send({ userId: USER_ID, content, city: currentWeatherCity() })
-    const reply = res.data.reply
-    const songs = res.data.songs || []
+    const context = await executeClientTools(data.clientToolRequests || [])
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({
+        type: 'message',
+        userId: USER_ID,
+        content: data.content || input.value.trim(),
+        context
+      }))
+      startReplyTimer()
+      return
+    }
+    await sendByRest(data.content || input.value.trim(), context)
+  } catch (e) {
+    sending.value = false
     messages.value.push({
-      role: reply.role || 'dj',
-      text: reply.text,
-      songs: normalizeSongItems(res.data.selectedSongs, songs),
-      time: reply.time || '刚刚'
+      role: 'dj',
+      text: '我没能获取到浏览器定位。你可以允许定位权限，或者直接告诉我所在城市。',
+      time: '刚刚'
     })
+    await scrollToBottom()
+  }
+}
+
+async function executeClientTools(requests) {
+  const context = currentChatContext()
+  for (const request of requests) {
+    if (request.name === 'location.current') {
+      context.location = await resolveCurrentLocation()
+    }
+  }
+  return context
+}
+
+async function resolveCurrentLocation() {
+  const position = await currentPosition()
+  const { latitude, longitude } = position.coords
+  const value = `${longitude.toFixed(4)},${latitude.toFixed(4)}`
+  const res = await chatApi.weather(value)
+  const location = {
+    city: res.data.city || '',
+    latitude,
+    longitude,
+    source: 'browser_geolocation'
+  }
+  rememberLocation(location)
+  return location
+}
+
+function currentPosition() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('geolocation unsupported'))
+      return
+    }
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: false,
+      timeout: GEOLOCATION_TIMEOUT,
+      maximumAge: 10 * 60 * 1000
+    })
+  })
+}
+
+function currentChatContext() {
+  const stored = localStorage.getItem(WEATHER_LOCATION_STORAGE_KEY)
+  if (stored) {
+    try {
+      const location = JSON.parse(stored)
+      if (location && location.source !== 'default' && (location.city || (location.latitude && location.longitude))) {
+        return { location }
+      }
+    } catch (e) {
+      localStorage.removeItem(WEATHER_LOCATION_STORAGE_KEY)
+    }
+  }
+  return {}
+}
+
+function rememberLocation(location) {
+  if (location.city) {
+    localStorage.setItem(WEATHER_CITY_STORAGE_KEY, location.city)
+  }
+  localStorage.setItem(WEATHER_LOCATION_STORAGE_KEY, JSON.stringify(location))
+}
+
+async function sendByRest(content, context) {
+  try {
+    const res = await chatApi.send({ userId: USER_ID, content, context: context || currentChatContext() })
+    if (Array.isArray(res.data.clientToolRequests) && res.data.clientToolRequests.length) {
+      const nextContext = await executeClientTools(res.data.clientToolRequests)
+      const nextRes = await chatApi.send({ userId: USER_ID, content, context: nextContext })
+      pushRestReply(nextRes.data)
+      connected.value = true
+      return
+    }
+    pushRestReply(res.data)
     connected.value = true
   } catch (e) {
     connected.value = false

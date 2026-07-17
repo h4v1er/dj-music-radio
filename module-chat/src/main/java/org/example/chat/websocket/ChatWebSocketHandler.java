@@ -5,8 +5,10 @@ import java.util.List;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.chat.service.ChatService;
+import org.example.chat.service.ChatService.ChatContext;
 import org.example.chat.service.ChatService.ChatSendRequest;
 import org.example.chat.service.ChatService.ChatSendResponse;
+import org.example.chat.service.ChatService.ClientToolRequest;
 import org.example.chat.service.ChatService.SelectedSong;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
@@ -30,7 +32,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         session.sendMessage(new TextMessage(objectMapper.writeValueAsString(
-                new ChatSocketResponse("connected", "DJ WebSocket 已连接", List.of(), List.of(), null)
+                new ChatSocketResponse("connected", "DJ WebSocket 已连接", List.of(), List.of(), null, List.of())
         )));
     }
 
@@ -44,14 +46,33 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             }
 
             Long userId = request.userId() == null ? DEFAULT_USER_ID : request.userId();
-            ChatSendResponse response = chatService.send(new ChatSendRequest(userId, request.content(), request.city()));
+            ChatSendResponse response = chatService.send(new ChatSendRequest(
+                    userId,
+                    request.content(),
+                    request.city(),
+                    request.context()
+            ));
+            if (!response.clientToolRequests().isEmpty()) {
+                session.sendMessage(new TextMessage(objectMapper.writeValueAsString(
+                        new ChatSocketResponse(
+                                "tool_request",
+                                request.content(),
+                                List.of(),
+                                List.of(),
+                                null,
+                                response.clientToolRequests()
+                        )
+                )));
+                return;
+            }
             session.sendMessage(new TextMessage(objectMapper.writeValueAsString(
                     new ChatSocketResponse(
                             "reply",
                             response.reply().text(),
                             response.songs(),
                             response.selectedSongs(),
-                            response.reply().time()
+                            response.reply().time(),
+                            List.of()
                     )
             )));
         } catch (Exception e) {
@@ -66,11 +87,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     private void sendError(WebSocketSession session, String content) throws IOException {
         session.sendMessage(new TextMessage(objectMapper.writeValueAsString(
-                new ChatSocketResponse("error", content, List.of(), List.of(), null)
+                new ChatSocketResponse("error", content, List.of(), List.of(), null, List.of())
         )));
     }
 
-    public record ChatSocketRequest(String type, Long userId, String content, String city) {
+    public record ChatSocketRequest(String type, Long userId, String content, String city, ChatContext context) {
     }
 
     public record ChatSocketResponse(
@@ -78,6 +99,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             String content,
             List<String> songs,
             List<SelectedSong> selectedSongs,
-            String time) {
+            String time,
+            List<ClientToolRequest> clientToolRequests) {
     }
 }

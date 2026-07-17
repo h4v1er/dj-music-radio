@@ -11,6 +11,7 @@ import { chatApi } from '../api/chat'
 const DEFAULT_CITY = '北京'
 const GEOLOCATION_TIMEOUT = 5000
 const WEATHER_CITY_STORAGE_KEY = 'dj-weather-city'
+const WEATHER_LOCATION_STORAGE_KEY = 'dj-weather-location'
 
 const weather = ref({
   icon: '☀️',
@@ -45,7 +46,7 @@ async function loadWeather() {
       obsTime: res.data.obsTime || '',
       message: sourceMessage(location.source, res.data.message)
     }
-    rememberWeatherCity(weather.value.city)
+    rememberWeatherLocation(weather.value.city, location)
     locationSource.value = location.source
     greeting.value = res.data.greeting || '想听点什么？'
   } catch (e) {
@@ -62,12 +63,16 @@ async function resolveWeatherLocation() {
     const { latitude, longitude } = position.coords
     return {
       value: `${longitude.toFixed(4)},${latitude.toFixed(4)}`,
-      source: 'geolocation'
+      source: 'geolocation',
+      latitude,
+      longitude
     }
   } catch (e) {
     return {
       value: DEFAULT_CITY,
-      source: 'default'
+      source: 'default',
+      latitude: null,
+      longitude: null
     }
   }
 }
@@ -91,9 +96,19 @@ function sourceMessage(source, message) {
   return message ? `${prefix}；${message}` : prefix
 }
 
-function rememberWeatherCity(city) {
+function rememberWeatherLocation(city, location) {
   if (city) {
     localStorage.setItem(WEATHER_CITY_STORAGE_KEY, city)
+  }
+  if (location.source === 'geolocation') {
+    localStorage.setItem(WEATHER_LOCATION_STORAGE_KEY, JSON.stringify({
+      city,
+      latitude: location.latitude || null,
+      longitude: location.longitude || null,
+      source: location.source
+    }))
+  } else {
+    localStorage.removeItem(WEATHER_LOCATION_STORAGE_KEY)
   }
 }
 </script>

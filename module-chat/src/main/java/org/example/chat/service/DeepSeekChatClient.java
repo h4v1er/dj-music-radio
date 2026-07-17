@@ -32,6 +32,7 @@ public class DeepSeekChatClient {
             "rec.daily",
             "rec.hot",
             "rec.preferences",
+            "location.current",
             "weather.now"
     );
 
@@ -46,6 +47,7 @@ public class DeepSeekChatClient {
             - rec.daily: user's daily recommendation list.
             - rec.hot: current hot ranking from the recommendation service.
             - rec.preferences: user's preference tags; not songs, but useful context for personalized recommendation.
+            - location.current: client-side browser geolocation. Use when the user asks where they are, says "我这里/当前位置/当地", or asks location-aware questions without naming a city.
             - weather.now: current weather by city. Use for weather questions or weather-aware music recommendations.
 
             Planning rules:
@@ -55,6 +57,8 @@ public class DeepSeekChatClient {
             - If the user intent is ambiguous, ask one short clarification question instead of guessing.
             - For music recommendation, choose tools only when the user clearly asks to find, recommend, play, search, or compare songs. Do not call every tool by default.
             - For semantic scene-based music, prefer music.catalog plus rec.preferences; add weather.now only if weather or city matters.
+            - If the user asks about their current location or says "我这里/当地/当前位置" and no city is known from the message, call location.current first.
+            - If the user asks weather or weather-aware music for "我这里/当地/当前位置", call location.current plus weather.now. Leave weather.now.location empty so the system can fill it from location.current.
             - For explicit artist/title, prefer music.search; add music.neteaseSearch when the request asks NetEase or the local DB may miss it.
             - For "daily", "random", "不知道听什么", prefer rec.daily plus rec.preferences; add rec.hot as a fallback.
             - For weather-only questions, use weather.now and no music tools.
@@ -455,8 +459,12 @@ public class DeepSeekChatClient {
             List<ToolCallPlan> calls = new ArrayList<>();
             boolean music = looksLikeMusicRequest(normalized);
             boolean weather = looksLikeWeatherRequest(normalized);
+            boolean location = looksLikeLocationRequest(normalized);
+            if (location) {
+                calls.add(new ToolCallPlan("location.current", "获取浏览器当前位置", "", "", 1));
+            }
             if (weather) {
-                calls.add(new ToolCallPlan("weather.now", "回答天气或结合天气推荐", "", extractLocation(normalized), 1));
+                calls.add(new ToolCallPlan("weather.now", "回答天气或结合天气推荐", "", location ? "" : extractLocation(normalized), 1));
             }
             if (music) {
                 calls.add(new ToolCallPlan("music.search", "先按关键词查本地歌库", normalized, "", 20));
@@ -466,7 +474,7 @@ public class DeepSeekChatClient {
                     calls.add(new ToolCallPlan("music.neteaseSearch", "按用户要求搜索网易云", normalized, "", 20));
                 }
             }
-            String mode = weather && !music ? "weather" : music ? "music" : "general";
+            String mode = location && !weather && !music ? "general" : weather && !music ? "weather" : music ? "music" : "general";
             boolean ambiguous = looksLikeBareFragment(normalized);
             return new ToolPlan(
                     ambiguous ? "general" : mode,
@@ -500,6 +508,8 @@ public class DeepSeekChatClient {
             if (shouldUseTools && safeTools.isEmpty()) {
                 if ("weather".equals(chatMode) || looksLikeWeatherRequest(userInput)) {
                     safeTools = List.of(new ToolCallPlan("weather.now", "获取天气", "", extractLocation(userInput), 1));
+                } else if (looksLikeLocationRequest(userInput)) {
+                    safeTools = List.of(new ToolCallPlan("location.current", "获取浏览器当前位置", "", "", 1));
                 } else if ("music".equals(chatMode) || looksLikeMusicRequest(userInput)) {
                     safeTools = List.of(new ToolCallPlan("music.catalog", "获取本地歌曲候选池", userInput, "", 50));
                 }
@@ -533,6 +543,16 @@ public class DeepSeekChatClient {
                     || value.contains("晴")
                     || value.contains("阴天")
                     || value.contains("气温");
+        }
+
+        private static boolean looksLikeLocationRequest(String value) {
+            return value.contains("我现在在哪")
+                    || value.contains("我在哪")
+                    || value.contains("我这里")
+                    || value.contains("当前位置")
+                    || value.contains("当前城市")
+                    || value.contains("当地")
+                    || value.contains("本地");
         }
 
         private static boolean looksLikeBareFragment(String value) {

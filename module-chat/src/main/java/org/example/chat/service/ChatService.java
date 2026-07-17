@@ -43,6 +43,7 @@ public class ChatService {
             "西宁", "乌鲁木齐", "呼和浩特", "哈尔滨", "长春", "沈阳", "大连", "石家庄", "太原"
     );
     private static final Map<Long, Deque<ChatMessage>> HISTORIES = new ConcurrentHashMap<>();
+    private static final String TOOL_LOCATION_CURRENT = "location.current";
 
     private final ChatHistoryMapper chatHistoryMapper;
     private final MusicRecommendationClient musicRecommendationClient;
@@ -65,15 +66,26 @@ public class ChatService {
     }
 
     public ChatSendResponse send(ChatSendRequest request) {
-        ChatSendRequest safeRequest = request == null ? new ChatSendRequest(DEFAULT_USER_ID, "", "") : request;
+        ChatSendRequest safeRequest = request == null ? new ChatSendRequest(DEFAULT_USER_ID, "", "", null) : request;
         long userId = safeRequest.userId() == null ? DEFAULT_USER_ID : safeRequest.userId();
         String content = normalize(safeRequest.content());
+        LocationContext requestLocation = requestLocation(safeRequest);
         List<ChatMessage> recentHistory = history(userId);
         ChatMessage userMessage = new ChatMessage("user", content, now());
 
-        String weatherLocation = resolveWeatherLocation(content, safeRequest.city(), recentHistory);
+        String weatherLocation = resolveWeatherLocation(content, locationValue(requestLocation), recentHistory);
         DeepSeekChatClient.ToolPlan plan = deepSeekChatClient.planToolUse(content, recentHistory);
+        plan = enrichLocationPlan(content, plan);
         plan = enrichWeatherPlan(content, weatherLocation, plan);
+        if (needsClientLocation(plan) && requestLocation == null) {
+            return new ChatSendResponse(
+                    new ChatMessage("tool", "", now()),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(new ClientToolRequest("location-current", TOOL_LOCATION_CURRENT, "获取浏览器当前位置"))
+            );
+        }
         if (plan.needClarification()) {
             String question = plan.clarificationQuestion().isBlank()
                     ? "你想让我具体帮你做什么？"
@@ -83,7 +95,7 @@ public class ChatService {
             appendHistory(userId, reply);
             return new ChatSendResponse(reply, List.of(), List.of(), List.of());
         }
-        ToolExecution execution = executeTools(userId, content, weatherLocation, plan);
+        ToolExecution execution = executeTools(userId, content, weatherLocation, requestLocation, plan);
         DeepSeekChatClient.AiReply aiReply = deepSeekChatClient.composeReply(
                 content,
                 plan,
@@ -134,7 +146,12 @@ public class ChatService {
         return new ArrayList<>(history);
     }
 
-    private ToolExecution executeTools(long userId, String content, String weatherLocation, DeepSeekChatClient.ToolPlan plan) {
+    private ToolExecution executeTools(
+            long userId,
+            String content,
+            String weatherLocation,
+            LocationContext requestLocation,
+            DeepSeekChatClient.ToolPlan plan) {
         if (plan == null || !plan.needTools()) {
             return new ToolExecution(List.of(), List.of());
         }
@@ -148,6 +165,7 @@ public class ChatService {
             try {
                 int before = candidates.size();
                 switch (call.name()) {
+                    case TOOL_LOCATION_CURRENT -> toolResults.add(locationResult(requestLocation));
                     case "music.search" -> {
                         Object body = musicRecommendationClient.searchSongs(keyword(content, call));
                         collectSongCandidates(body, candidates, "PROJECT_SEARCH", call.purpose());
@@ -251,6 +269,28 @@ public class ChatService {
         return plan != null && plan.tools().stream().anyMatch(call -> call.name().startsWith("music.") || call.name().startsWith("rec."));
     }
 
+    private static boolean needsClientLocation(DeepSeekChatClient.ToolPlan plan) {
+        return plan != null && plan.tools().stream().anyMatch(call -> TOOL_LOCATION_CURRENT.equals(call.name()));
+    }
+
+    private static ToolResult locationResult(LocationContext location) {
+        if (location == null) {
+            return new ToolResult(TOOL_LOCATION_CURRENT, "获取浏览器当前位置", "client_required", "需要前端执行浏览器定位", 0);
+        }
+        List<String> parts = new ArrayList<>();
+        if (location.city() != null && !location.city().isBlank()) {
+            parts.add("city=" + location.city());
+        }
+        if (location.latitude() != null && location.longitude() != null) {
+            parts.add("lat=" + location.latitude());
+            parts.add("lon=" + location.longitude());
+        }
+        if (location.source() != null && !location.source().isBlank()) {
+            parts.add("source=" + location.source());
+        }
+        return new ToolResult(TOOL_LOCATION_CURRENT, "获取浏览器当前位置", "ok", String.join("，", parts), 0);
+    }
+
     private static String keyword(String content, DeepSeekChatClient.ToolCallPlan call) {
         return call.keyword() == null || call.keyword().isBlank() ? content : call.keyword();
     }
@@ -340,6 +380,30 @@ public class ChatService {
         );
     }
 
+    private static DeepSeekChatClient.ToolPlan enrichLocationPlan(String content, DeepSeekChatClient.ToolPlan plan) {
+        if (!looksLikeLocationRequest(content)) {
+            return plan;
+        }
+        List<DeepSeekChatClient.ToolCallPlan> originalTools = plan == null || plan.tools() == null
+                ? List.of()
+                : plan.tools();
+        boolean hasLocationTool = originalTools.stream().anyMatch(tool -> TOOL_LOCATION_CURRENT.equals(tool.name()));
+        List<DeepSeekChatClient.ToolCallPlan> tools = new ArrayList<>();
+        if (!hasLocationTool) {
+            tools.add(new DeepSeekChatClient.ToolCallPlan(TOOL_LOCATION_CURRENT, "获取浏览器当前位置", "", "", 1));
+        }
+        tools.addAll(originalTools);
+        return new DeepSeekChatClient.ToolPlan(
+                plan == null ? "general" : plan.chatMode(),
+                plan == null ? "使用当前位置回答用户问题" : plan.answerGoal(),
+                false,
+                "",
+                true,
+                tools,
+                plan == null ? "" : plan.responseStyle()
+        );
+    }
+
     private static String resolveWeatherLocation(String content, String requestCity, List<ChatMessage> recentHistory) {
         String explicitLocation = extractWeatherLocation(content);
         if (!explicitLocation.isBlank()) {
@@ -355,6 +419,37 @@ public class ChatService {
                     return location;
                 }
             }
+        }
+        return "";
+    }
+
+    private static LocationContext requestLocation(ChatSendRequest request) {
+        if (request == null) {
+            return null;
+        }
+        if (request.context() != null && request.context().location() != null && hasLocationValue(request.context().location())) {
+            return request.context().location();
+        }
+        if (request.city() != null && !request.city().isBlank()) {
+            return new LocationContext(request.city().trim(), null, null, "legacy_city");
+        }
+        return null;
+    }
+
+    private static boolean hasLocationValue(LocationContext location) {
+        return location.city() != null && !location.city().isBlank()
+                || location.latitude() != null && location.longitude() != null;
+    }
+
+    private static String locationValue(LocationContext location) {
+        if (location == null) {
+            return "";
+        }
+        if (location.city() != null && !location.city().isBlank()) {
+            return location.city().trim();
+        }
+        if (location.latitude() != null && location.longitude() != null) {
+            return location.longitude() + "," + location.latitude();
         }
         return "";
     }
@@ -402,6 +497,19 @@ public class ChatService {
                 || content.contains("晴")
                 || content.contains("阴")
                 || content.contains("多云"));
+    }
+
+    private static boolean looksLikeLocationRequest(String content) {
+        return content != null
+                && (content.contains("我现在在哪")
+                || content.contains("我在哪")
+                || content.contains("你不能看到我的定位")
+                || content.contains("我的定位")
+                || content.contains("我这里")
+                || content.contains("当前位置")
+                || content.contains("当前城市")
+                || content.contains("当地")
+                || content.contains("本地"));
     }
 
     private static boolean looksLikeMusicRequest(String content) {
@@ -730,20 +838,38 @@ public class ChatService {
         return LocalTime.now().format(TIME_FORMATTER);
     }
 
-    public record ChatSendRequest(Long userId, String content, String city) {
+    public record ChatSendRequest(Long userId, String content, String city, ChatContext context) {
     }
 
     public record ChatSendResponse(
             ChatMessage reply,
             List<String> songs,
             List<SelectedSong> selectedSongs,
-            List<ToolResult> toolCalls) {
+            List<ToolResult> toolCalls,
+            List<ClientToolRequest> clientToolRequests) {
+
+        public ChatSendResponse(
+                ChatMessage reply,
+                List<String> songs,
+                List<SelectedSong> selectedSongs,
+                List<ToolResult> toolCalls) {
+            this(reply, songs, selectedSongs, toolCalls, List.of());
+        }
     }
 
     public record ChatMessage(String role, String text, String time) {
     }
 
     public record ToolResult(String name, String purpose, String status, String summary, int songCount) {
+    }
+
+    public record ClientToolRequest(String id, String name, String purpose) {
+    }
+
+    public record ChatContext(LocationContext location) {
+    }
+
+    public record LocationContext(String city, Double latitude, Double longitude, String source) {
     }
 
     public record SelectedSong(
