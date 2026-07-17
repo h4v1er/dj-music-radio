@@ -30,11 +30,15 @@
 - [x] 新增 RabbitMQ 配置 `RabbitMQConfig` + `RecNotificationProducer`，推荐生成后发送通知消息
 - [x] `RecPanel.vue` 接入真实后端 API，热门榜单 / 今日推荐 / 偏好标签三态处理
 - [x] 创建数据库表 `user_behavior` 和 `daily_recommend`
-- [x] 安装并配置 Redis 3.0.504、Nacos 2.4.3、Erlang OTP + RabbitMQ Server 4.1.3
+- [x] 安装并配置 Redis、Nacos、Erlang OTP 和 RabbitMQ，支撑推荐模块联调
 - [x] 验证通过：Maven 编译成功，模块正常启动并注册到 Nacos，`/rec/hello` `/rec/hot` `/rec/preferences` 接口正常返回
 
 ## 第2天（日期：______）
-- [ ] 
+- [x] `dev-rec` 阶段性代码已合入当前 `dev-chat` 集成分支
+- [x] 与 `module-music` 联调：通过 Feign 查询歌曲详情和按关键词搜索歌曲
+- [x] 前端 `RecPanel.vue` 已接入热门榜、今日推荐、偏好标签
+- [x] 当前文档已补充 [module-rec-runtime.md](../module-rec-runtime.md)，记录运行依赖、数据表、推荐逻辑和验证命令
+- [x] 补充正式 SQL 初始化脚本：`module-rec/src/main/resources/sql/rec_tables.sql`
 
 ## 第3天（日期：______）
 - [ ] 

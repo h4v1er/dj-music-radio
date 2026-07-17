@@ -65,3 +65,5 @@
 - [x] 新增 `TimeWidget.vue` 顶栏时间日期组件，悬浮显示完整日期、当前时间和时区；新增 `time.current` 对话工具
 - [x] 扩展 `GET /chat/weather` 实时天气字段，`WeatherWidget.vue` 悬浮显示体感、湿度、风、降水、气压、能见度、云量和更新时间
 - [x] 新增 [module-chat-runtime.md](../module-chat-runtime.md)，记录 DeepSeek、和风天气环境变量、远端计划任务重启和天气接口验证方式
+- [x] 整合 music 和 rec 阶段性最新代码到当前 `dev-chat` 分支，并按当前代码补全文档中心、新人运行手册、项目完整说明书、API、架构和各模块运行说明
+- [x] 将配置中的 DeepSeek key、MySQL 密码、RabbitMQ 账号密码改为环境变量读取，避免真实密钥进入 Git

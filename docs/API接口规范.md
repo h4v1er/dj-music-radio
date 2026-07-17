@@ -1,56 +1,104 @@
 # API 接口规范
 
-> 所有接口通过 Gateway (:8080) 统一入口，前端请求 `/api/xxx` → Vite 代理 → Gateway 路由
+默认前端通过 Vite 代理访问：
 
-## 通用约定
+- `/api/**` -> `http://localhost:8080/**` -> Gateway；
+- `/music/**` -> `http://localhost:8082/music/**`，音乐模块开发阶段直连。
 
-- 基础路径：`http://localhost:8080`
-- 请求格式：`application/json`
-- 响应格式：`{ "code": 200, "msg": "success", "data": {} }`
-- 分页格式：`{ "page": 1, "size": 10, "total": 100, "records": [] }`
+统一响应并未完全一致：
 
----
+- `module-music` 使用 `Result<T>`：`{ "code": 200, "msg": "success", "data": ... }`；
+- `module-chat`、`module-rec`、`module-user` 多数接口直接返回对象、数组或字符串；
+- 文档下方按真实代码分别说明。
 
-## 一、对话服务 `/chat`（队员A :8081）
+## 1. Gateway
 
-| 方法 | 路径 | 说明 | 状态 |
-|:-----|:-----|:-----|:----:|
-| `GET` | `/chat/hello` | 服务健康检查 | ✅ |
-| `WS` | `/chat/ws` | WebSocket 实时对话 | ✅ |
-| `POST` | `/chat/send` | 发送对话消息 | ✅ |
-| `GET` | `/chat/history?userId=` | 获取对话历史 | ✅ |
-| `GET` | `/chat/weather?city=` | 查询天气 | ✅ |
+| 路径 | 转发目标 |
+|:--|:--|
+| `/chat/**` | `lb://module-chat` |
+| `/music/**` | `lb://module-music` |
+| `/rec/**` | `lb://module-rec` |
+| `/user/**` | `lb://module-user` |
 
-### WebSocket 消息格式
+## 2. module-chat
+
+### 2.1 接口清单
+
+| 方法 | 路径 | 说明 |
+|:--|:--|:--|
+| `GET` | `/chat/hello` | 健康检查，返回字符串 |
+| `POST` | `/chat/send` | 发送聊天消息 |
+| `GET` | `/chat/history?userId=1` | 最近 10 条聊天历史 |
+| `GET` | `/chat/weather?city=北京` | 天气查询，city 可为城市名或 `lon,lat` |
+| `WS` | `/chat/ws` | WebSocket 实时聊天 |
+
+### 2.2 `POST /chat/send`
+
+请求：
 
 ```json
-// 客户端 → 服务端
 {
-  "type": "message",
   "userId": 1,
-  "content": "根据我这里天气推荐几首歌",
+  "content": "我这里下雨，推荐几首适合晚上听的歌",
   "context": {
     "location": {
-      "city": "威海市",
+      "city": "山东省 威海",
       "latitude": 37.5,
       "longitude": 122.1,
       "source": "browser_geolocation"
     }
   }
 }
+```
 
-// 服务端 → 客户端
+响应：
+
+```json
 {
-  "type": "reply",
-  "content": "好的，为你推荐以下歌曲...",
-  "songs": [...],
-  "selectedSongs": [...]
+  "reply": {
+    "role": "dj",
+    "text": "结合你这里的天气，我会偏向安静、柔和一点的氛围。",
+    "time": "21:30"
+  },
+  "songs": ["Rain - Ryuichi Sakamoto"],
+  "selectedSongs": [
+    {
+      "id": 14,
+      "songId": 14,
+      "sourceId": "14",
+      "source": "PROJECT_CATALOG",
+      "title": "Rain",
+      "artist": "Ryuichi Sakamoto",
+      "album": "Music For Film",
+      "genre": "网易云",
+      "coverUrl": "",
+      "filePath": "",
+      "duration": 0,
+      "netease": false,
+      "playable": true
+    }
+  ],
+  "toolCalls": [
+    {
+      "name": "weather.now",
+      "purpose": "获取当前天气",
+      "status": "ok",
+      "summary": "天气：山东省 威海 多云 27°，source=real",
+      "songCount": 0
+    }
+  ],
+  "clientToolRequests": []
 }
+```
 
-// 服务端 → 客户端：请求前端执行客户端工具
+如果 AI 规划需要浏览器定位但请求没有 `context.location`：
+
+```json
 {
-  "type": "tool_request",
-  "content": "我现在在哪啊",
+  "reply": { "role": "tool", "text": "", "time": "21:30" },
+  "songs": [],
+  "selectedSongs": [],
+  "toolCalls": [],
   "clientToolRequests": [
     {
       "id": "location-current",
@@ -61,38 +109,52 @@
 }
 ```
 
-### 发送对话消息
+### 2.3 WebSocket
 
-`POST /chat/send`
+客户端发送：
 
 ```json
 {
+  "type": "message",
   "userId": 1,
-  "content": "我这里天气怎么样",
-  "context": {
-    "location": {
-      "city": "威海市",
-      "latitude": 37.5,
-      "longitude": 122.1,
-      "source": "browser_geolocation"
-    }
-  }
+  "content": "我现在在哪，天气怎么样",
+  "context": {}
 }
 ```
 
-`context.location` 为可选上下文。没有该上下文但 AI 规划需要当前位置时，WebSocket 会返回 `tool_request(location.current)`，由前端执行浏览器定位后带着工具结果再次发送原消息。
+服务端普通回复：
 
-### 对话可用工具
+```json
+{
+  "type": "reply",
+  "content": "我查到你所在城市的天气...",
+  "songs": [],
+  "selectedSongs": [],
+  "time": "21:30",
+  "clientToolRequests": []
+}
+```
 
-| 工具 | 执行端 | 说明 |
-|:---|:---|:---|
-| `location.current` | 前端 | 浏览器定位，需用户授权 |
-| `time.current` | 后端 | 当前日期、时间、星期、时区 |
-| `weather.now` | 后端 | 和风天气实时天气，包含温度、体感、湿度、风、降水、气压、能见度等 |
-| `music.catalog` / `music.search` / `music.neteaseSearch` | 后端 | 歌曲候选、关键词搜索、网易云搜索 |
-| `rec.daily` / `rec.hot` / `rec.preferences` | 后端 | 推荐模块数据 |
+服务端请求前端工具：
 
-### 天气响应格式
+```json
+{
+  "type": "tool_request",
+  "content": "我现在在哪，天气怎么样",
+  "songs": [],
+  "selectedSongs": [],
+  "time": null,
+  "clientToolRequests": [
+    {
+      "id": "location-current",
+      "name": "location.current",
+      "purpose": "获取浏览器当前位置"
+    }
+  ]
+}
+```
+
+### 2.4 天气响应
 
 `GET /chat/weather?city=北京`
 
@@ -121,96 +183,131 @@
 }
 ```
 
-`source=real` 表示已调用和风天气真实接口；`source=demo` 表示未配置 key、host 错误、接口异常等情况下的显式演示降级，具体原因看 `message`。
+`source=demo` 表示真实天气不可用，`message` 会说明原因。
 
----
+## 3. module-music
 
-## 二、音乐服务 `/music`（队员B :8082）
+所有接口基础路径：`/music`。成功响应一般为：
 
-| 方法 | 路径 | 说明 | 状态 |
-|:-----|:-----|:-----|:----:|
-| `GET` | `/music/hello` | 服务健康检查 | ✅ |
-| `GET` | `/music/song/list` | 歌曲列表（分页） | 📌 TODO |
-| `GET` | `/music/song/{id}` | 歌曲详情 | 📌 TODO |
-| `GET` | `/music/song/search?kw=` | 搜索歌曲 | 📌 TODO |
-| `GET` | `/music/playlist/list?userId=` | 用户歌单列表 | 📌 TODO |
-| `POST` | `/music/playlist/create` | 创建歌单 | 📌 TODO |
-| `POST` | `/music/playlist/import` | 导入歌单（异步，RabbitMQ） | 📌 TODO |
-| `POST` | `/music/playlist/{id}/addSong` | 添加歌曲到歌单 | 📌 TODO |
+```json
+{ "code": 200, "msg": "success", "data": {} }
+```
 
-### 歌曲对象
+### 3.1 歌曲
+
+| 方法 | 路径 | 说明 |
+|:--|:--|:--|
+| `GET` | `/music/hello` | 健康检查 |
+| `GET` | `/music/song/list?page=1&size=20&genre=` | 分页歌曲列表，按播放次数倒序 |
+| `GET` | `/music/song/{id}` | 歌曲详情，同时播放次数 +1 |
+| `GET` | `/music/song/search?kw=&page=1&size=20` | 按标题/歌手/专辑 LIKE 搜索 |
+| `GET` | `/music/song/genres` | 全部流派 |
+| `PUT` | `/music/song/{id}/lyric` | 保存歌词，body: `{ "lyric": "..." }` |
+| `POST` | `/music/song/{id}/analyze-emotion` | 手动触发情绪分析 |
+
+### 3.2 歌单
+
+| 方法 | 路径 | 说明 |
+|:--|:--|:--|
+| `GET` | `/music/playlist/list?userId=1` | 用户歌单 |
+| `GET` | `/music/playlist/{id}` | 歌单详情 |
+| `GET` | `/music/playlist/{id}/songs` | 歌单歌曲 |
+| `POST` | `/music/playlist` | 创建歌单 |
+| `PUT` | `/music/playlist/{id}` | 更新歌单 |
+| `DELETE` | `/music/playlist/{id}` | 删除歌单 |
+| `POST` | `/music/playlist/{id}/song/{songId}` | 添加歌曲 |
+| `DELETE` | `/music/playlist/{id}/song/{songId}` | 移除歌曲 |
+| `PUT` | `/music/playlist/{id}/sort` | 歌曲排序，body: `{ "songIds": [1,2,3] }` |
+| `POST` | `/music/playlist/import` | 异步导入歌单 |
+| `GET` | `/music/playlist/import/status/{taskId}` | 当前简化返回 completed |
+
+导入请求：
 
 ```json
 {
-  "id": 1,
-  "title": "Bohemian Rhapsody",
-  "artist": "Queen",
-  "album": "A Night at the Opera",
-  "coverUrl": "...",
-  "audioUrl": "...",
-  "duration": 354,
-  "genre": "摇滚"
+  "name": "夜跑歌单",
+  "userId": 1,
+  "content": "[{\"title\":\"...\",\"artist\":\"...\",\"source\":\"NETEASE\",\"sourceId\":\"...\"}]"
 }
 ```
 
----
+### 3.3 网易云代理
 
-## 三、推荐服务 `/rec`（队员C :8083）
+| 方法 | 路径 | 说明 |
+|:--|:--|:--|
+| `GET` | `/music/netease/search?keywords=&limit=20` | 搜索歌曲 |
+| `GET` | `/music/netease/url?id=` | 获取播放 URL，按多个音质降级尝试 |
+| `GET` | `/music/netease/detail?ids=` | 歌曲详情 |
+| `GET` | `/music/netease/lyric?id=` | 歌词 |
+| `GET` | `/music/netease/lyric/batch?ids=1,2` | 批量歌词 |
+| `GET` | `/music/netease/playlist?id=` | 歌单详情和歌曲列表 |
+| `GET` | `/music/netease/cover?url=` | 封面代理 |
+| `GET` | `/music/netease/ping` | 检查 3000 代理是否可用 |
 
-| 方法 | 路径 | 说明 | 状态 |
-|:-----|:-----|:-----|:----:|
-| `GET` | `/rec/hello` | 服务健康检查 | ✅ |
-| `GET` | `/rec/daily?userId=` | 今日推荐 | 📌 TODO |
-| `GET` | `/rec/hot` | 热门榜单（Redis ZSET） | 📌 TODO |
-| `GET` | `/rec/similar?songId=` | 相似歌曲推荐 | 📌 TODO |
-| `POST` | `/rec/behavior` | 上报用户行为 | 📌 TODO |
+### 3.4 情绪和品味
 
-### 用户行为上报
+| 方法 | 路径 | 说明 |
+|:--|:--|:--|
+| `GET` | `/music/emotion/{songId}` | 获取歌曲情绪画像，不存在且有歌词时自动分析 |
+| `POST` | `/music/emotion/analyze/{songId}` | 触发单首分析 |
+| `POST` | `/music/emotion/batch/{playlistId}` | 异步分析歌单 |
+| `GET` | `/music/emotion/search?tag=` | 按情绪标签找歌 |
+| `GET` | `/music/emotion/playlist/{playlistId}/overview` | 歌单情绪总览 |
+| `GET` | `/music/taste/{userId}` | 用户品味画像 |
+| `GET` | `/music/taste/refresh/{userId}` | 重算用户品味 |
+
+### 3.5 收藏和历史
+
+| 方法 | 路径 | 说明 |
+|:--|:--|:--|
+| `GET` | `/music/favorite/list?userId=1` | 收藏列表 |
+| `POST` | `/music/favorite/{songId}?userId=1` | 添加收藏 |
+| `DELETE` | `/music/favorite/{songId}?userId=1` | 取消收藏 |
+| `GET` | `/music/favorite/check/{songId}?userId=1` | 是否收藏 |
+| `GET` | `/music/history/list?userId=1` | 最近播放历史 |
+| `POST` | `/music/history` | 记录播放，body: `{ "userId": 1, "songId": 10 }` |
+
+## 4. module-rec
+
+`module-rec` 当前直接返回数组或字符串。
+
+| 方法 | 路径 | 说明 |
+|:--|:--|:--|
+| `GET` | `/rec/hello` | 健康检查 |
+| `GET` | `/rec/hot` | Redis 热门榜 TOP10 |
+| `GET` | `/rec/daily?userId=1` | 今日推荐 |
+| `GET` | `/rec/similar?songId=1` | 相似歌曲 |
+| `POST` | `/rec/behavior` | 上报用户行为 |
+| `GET` | `/rec/preferences?userId=1` | 用户偏好标签 |
+
+行为请求：
 
 ```json
 {
   "userId": 1,
   "songId": 10,
-  "action": "play"  
-}
-// action 可选值: play(播放) | like(收藏) | skip(跳过) | share(分享)
-```
-
----
-
-## 四、用户服务 `/user`（队员D :8084）
-
-| 方法 | 路径 | 说明 | 状态 |
-|:-----|:-----|:-----|:----:|
-| `GET` | `/user/hello` | 服务健康检查 | ✅ |
-| `POST` | `/user/register` | 注册 | 📌 TODO |
-| `POST` | `/user/login` | 登录（返回JWT） | 📌 TODO |
-| `GET` | `/user/info` | 获取个人信息 | 📌 TODO |
-| `PUT` | `/user/info` | 修改个人信息 | 📌 TODO |
-| `POST` | `/user/favorite/add` | 收藏歌曲 | 📌 TODO |
-| `DELETE` | `/user/favorite/{songId}` | 取消收藏 | 📌 TODO |
-| `GET` | `/user/history` | 播放历史 | 📌 TODO |
-
-### 登录响应
-
-```json
-{
-  "code": 200,
-  "data": {
-    "token": "eyJhbGciOiJIUzI1NiIs...",
-    "userId": 1,
-    "username": "user1"
-  }
+  "action": "play"
 }
 ```
 
----
+`action` 可用：`play`、`like`、`skip`、`share`。
 
-## OpenFeign 内部调用
+## 5. module-user
 
-| 调用方 | 被调用方 | 接口 | 用途 |
-|:---|:---|:-----|:-----|
-| module-chat | module-music | `GET /music/song/search?kw=` | 对话中搜索歌曲 |
-| module-chat | module-rec | `GET /rec/daily?userId=` | 对话中获取推荐 |
-| module-rec | module-user | `GET /user/info` | 推荐时获取用户偏好 |
-| module-music | module-rec | `POST /rec/behavior` | 播放时上报行为 |
+当前真实后端只实现：
+
+| 方法 | 路径 | 说明 |
+|:--|:--|:--|
+| `GET` | `/user/hello` | 健康检查 |
+
+`frontend/src/api/user.js` 预留了 `/user/register`、`/user/login`、`/user/info`、`/user/favorite/*`、`/user/history`，但后端尚未实现，不能在文档里标为已完成。
+
+## 6. 前端跨组件事件
+
+聊天推荐歌曲点击播放：
+
+```js
+window.dispatchEvent(new CustomEvent('dj-play-song', { detail: song }))
+```
+
+`MusicPanel.vue` 监听 `dj-play-song`，将聊天返回的 `selectedSongs` 转成播放器可识别歌曲对象；网易云歌曲会再请求播放 URL 和歌词。

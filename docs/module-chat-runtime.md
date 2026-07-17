@@ -1,96 +1,110 @@
-# module-chat 运行依赖说明
+# module-chat 运行与实现说明
 
-> 负责范围：队员A `module-chat`、`ChatPanel.vue`、`WeatherWidget.vue`
+负责范围：队员 A 智能对话 DJ、天气、时间、定位、ChatPanel。
 
-## 必要服务
+## 1. 当前能力
 
-| 服务 | 用途 | 端口 |
-|:---|:---|:---:|
-| Gateway | 前端统一访问入口 | 8080 |
-| module-chat | 对话、历史、天气接口 | 8081 |
-| module-music | AI 对话调用真实歌曲搜索 | 8082 |
-| module-rec | AI 对话调用推荐结果 | 8083 |
-| Nacos | 服务发现 | 8848 |
-| MySQL | 对话历史持久化 | 3306 |
+- `GET /chat/hello` 健康检查；
+- `POST /chat/send` REST 对话；
+- `GET /chat/history` 最近 10 条历史；
+- `GET /chat/weather` 和风天气或演示降级；
+- `/chat/ws` WebSocket 实时对话；
+- DeepSeek 工具规划和最终回复；
+- 工具：music、rec、weather、time、location；
+- 前端可点击 AI 推荐歌曲并交给 MusicPanel 播放。
 
-## 环境变量
+## 2. 必要服务
+
+| 服务 | 端口 | 用途 |
+|:--|:--:|:--|
+| Gateway | 8080 | 前端统一访问 |
+| module-chat | 8081 | 对话服务 |
+| module-music | 8082 | 歌曲搜索、网易云搜索、候选池 |
+| module-rec | 8083 | 每日推荐、热门榜、偏好 |
+| MySQL | 3306 | `mall.chat_history` |
+| Nacos | 8848 | 服务发现 |
+| DeepSeek | 外部 | AI 工具规划和回复，可选 |
+| QWeather | 外部 | 真实天气，可选 |
+
+## 3. 环境变量
 
 | 变量 | 必填 | 说明 |
-|:---|:---:|:---|
-| `MYSQL_PASSWORD` | 是 | `module-chat` 连接 MySQL 使用 |
-| `DEEPSEEK_API_KEY` | 否 | 配置后启用真实 AI 对话规划和回复 |
+|:--|:--:|:--|
+| `MYSQL_PASSWORD` | 是 | MySQL root 密码 |
+| `DEEPSEEK_API_KEY` | 否 | 配置后启用真实 AI |
 | `DEEPSEEK_API_URL` | 否 | 默认 `https://api.deepseek.com/v1/chat/completions` |
 | `DEEPSEEK_MODEL` | 否 | 默认 `deepseek-chat` |
-| `QWEATHER_API_KEY` | 否 | 配置后启用和风天气真实天气 |
-| `QWEATHER_API_HOST` | 建议 | 和风天气控制台项目的专属 API Host |
-| `QWEATHER_WEATHER_URL` | 否 | 手动覆盖实时天气接口地址 |
-| `QWEATHER_GEO_URL` | 否 | 手动覆盖城市查询接口地址 |
+| `QWEATHER_API_KEY` | 否 | 配置后启用真实天气 |
+| `QWEATHER_API_HOST` | 建议 | 和风天气专属 API Host |
+| `QWEATHER_WEATHER_URL` | 否 | 覆盖天气接口 |
+| `QWEATHER_GEO_URL` | 否 | 覆盖城市查询接口 |
 
-不要把任何 API key 提交到 Git。每台电脑需要自己配置本机环境变量。
+不要把真实 key 写进 Git。
 
-## 配置真实天气 API
+## 4. AI 工具流程
 
-1. 在和风天气控制台创建项目，拿到 `API KEY` 和项目的 `API Host`。
-2. 在远端 Windows 设置用户级环境变量：
-
-```powershell
-[Environment]::SetEnvironmentVariable("QWEATHER_API_KEY", "<你的和风天气KEY>", "User")
-[Environment]::SetEnvironmentVariable("QWEATHER_API_HOST", "<你的API Host>", "User")
+```text
+用户输入
+  -> DeepSeekChatClient.planToolUse
+  -> 白名单校验工具
+  -> ChatService.executeTools
+  -> DeepSeekChatClient.composeReply
+  -> ChatSendResponse
 ```
 
-`QWEATHER_API_HOST` 可以写成 `abc123xyz.re.qweatherapi.com`，也可以带 `https://`。
+白名单：
 
-3. 重启 `module-chat`。如果使用计划任务启动：
-
-```powershell
-Stop-ScheduledTask -TaskName DJMusicRadio-module-chat -ErrorAction SilentlyContinue
-Start-ScheduledTask -TaskName DJMusicRadio-module-chat
+```text
+music.search
+music.catalog
+music.neteaseSearch
+rec.daily
+rec.hot
+rec.preferences
+location.current
+time.current
+weather.now
 ```
 
-4. 验证接口：
+当前没有任意联网搜索工具。
+
+## 5. 浏览器定位工具
+
+如果用户说“我这里天气怎么样”“我现在在哪”，且后端没有位置上下文，WebSocket 会返回：
+
+```json
+{
+  "type": "tool_request",
+  "clientToolRequests": [
+    { "id": "location-current", "name": "location.current", "purpose": "获取浏览器当前位置" }
+  ]
+}
+```
+
+前端调用浏览器 `navigator.geolocation`，再带 `context.location` 重发原消息。
+
+## 6. 天气接口
+
+`GET /chat/weather?city=北京` 或 `GET /chat/weather?city=122.1,37.5`
+
+真实天气返回 `source=real`；未配置 key、host 错误、城市失败、网络失败时返回 `source=demo`，并在 `message` 写明原因。
+
+## 7. 历史记录
+
+优先写 MySQL `mall.chat_history`。数据库不可用时写内存缓存，30 秒后重试数据库。
+
+建表脚本：
+
+```text
+module-chat/src/main/resources/sql/chat_history.sql
+```
+
+## 8. 验证命令
 
 ```powershell
+Invoke-RestMethod "http://127.0.0.1:8080/chat/hello"
 Invoke-RestMethod "http://127.0.0.1:8080/chat/weather?city=北京"
+Invoke-RestMethod -Method Post "http://127.0.0.1:8080/chat/send" `
+  -ContentType "application/json" `
+  -Body '{"userId":1,"content":"下雨天推荐几首歌","context":{}}'
 ```
-
-真实天气成功时应看到：
-
-```json
-{
-  "source": "real",
-  "message": "和风天气实时数据"
-}
-```
-
-如果返回 `source=demo`，说明走了显式演示降级。常见原因：
-
-- 没有配置 `QWEATHER_API_KEY`
-- `QWEATHER_API_HOST` 写错或没有重启服务
-- key 无效、接口额度不足、接口被限制
-- 城市查询失败或网络访问和风天气失败
-
-## 天气接口约定
-
-`GET /chat/weather?city=北京`
-
-```json
-{
-  "city": "北京",
-  "icon": "☀️",
-  "temp": "28°",
-  "text": "晴",
-  "greeting": "下午好，想听点什么？",
-  "source": "demo",
-  "obsTime": "",
-  "message": "未配置 QWEATHER_API_KEY，当前使用演示天气"
-}
-```
-
-字段说明：
-
-| 字段 | 说明 |
-|:---|:---|
-| `source` | `real` 表示和风天气真实数据，`demo` 表示演示降级数据 |
-| `obsTime` | 和风天气观测时间，演示数据为空 |
-| `message` | 当前数据来源或降级原因，前端可用于提示 |
-
