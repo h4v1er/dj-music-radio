@@ -1,60 +1,74 @@
-# DJ 闊充箰鐢靛彴 - 鏂囨。涓績
+# 📚 DJ 音乐电台 — 文档中心
 
-> 浠撳簱锛歨ttps://github.com/h4v1er/dj-music-radio
-> 褰撳墠闆嗘垚鍒嗘敮锛歚dev-chat`
-> 鏈枃妗ｇ洰褰曟寜褰撳墠浠ｇ爜鐘舵€佹暣鐞嗭紝鐢ㄤ簬寮€鍙戙€佽仈璋冦€佺瓟杈╁噯澶囥€?
-## 鏂颁汉蹇呰椤哄簭
+> 仓库：https://github.com/h4v1er/dj-music-radio
 
-| # | 鏂囨。 | 鐢ㄩ€?|
-|:--|:--|:--|
-| 1 | [鏂颁汉杩愯鎵嬪唽.md](./鏂颁汉杩愯鎵嬪唽.md) | 浠庨浂鎷変粨搴撱€侀厤鐜銆佸缓搴撱€佸惎鍔ㄥ叏濂楁湇鍔?|
-| 2 | [椤圭洰鎬讳綋璁捐.md](./椤圭洰鎬讳綋璁捐.md) | 鐞嗚В椤圭洰鐩爣銆佹ā鍧楄竟鐣屻€佸綋鍓嶅畬鎴愬害 |
-| 3 | [API鎺ュ彛瑙勮寖.md](./API鎺ュ彛瑙勮寖.md) | 鍓嶅悗绔仈璋冦€佹帴鍙ｈ嚜娴嬨€佺瓟杈╂帴鍙ｈ鏄?|
-| 4 | [缁勫憳寮€鍙戞墜鍐?md](./缁勫憳寮€鍙戞墜鍐?md) | 鍒嗘敮銆佹彁浜ゃ€佸悎骞躲€佸紑鍙戞祦绋嬭鑼?|
+---
 
-## 妯″潡杩愯鏂囨。
+## 新人必读（按顺序）
 
-| 鏂囨。 | 璇存槑 |
-|:--|:--|
-| [module-chat-runtime.md](./module-chat-runtime.md) | 鏅鸿兘瀵硅瘽 DJ锛欴eepSeek銆佸ぉ姘斻€佹椂闂淬€佸畾浣嶅伐鍏枫€侀獙璇佸懡浠?|
-| [module-music-runtime.md](./module-music-runtime.md) | 闊充箰涓績锛氱綉鏄撲簯浠ｇ悊銆佹瓕鍗曞鍏ャ€佹儏缁垎鏋愩€佹暟鎹簱鍒濆鍖?|
+| # | 文档 | 读它干什么 |
+|:--|:-----|:-----|
+| 1 | [**项目总体设计.md**](./项目总体设计.md) | 🔥 最重要！项目到底做成什么样、每人交付什么 |
+| 2 | [**组员开发手册.md**](./组员开发手册.md) | 怎么克隆、怎么建分支、怎么提交、常见错误 |
 
-## 椤圭洰涓庣瓟杈╄祫鏂?
-| 鏂囨。 | 璇存槑 |
-|:--|:--|
-| [椤圭洰瀹屾暣璇存槑涔?md](./椤圭洰瀹屾暣璇存槑涔?md) | 鏈€璇︾粏椤圭洰浠嬬粛锛屽悗缁啓椤圭洰鎶ュ憡銆丳PT銆佺瓟杈╃浼樺厛寮曠敤 |
-| [鏋舵瀯璁捐.md](./鏋舵瀯璁捐.md) | 寰湇鍔℃灦鏋勩€佽皟鐢ㄩ摼璺€佹妧鏈爤銆佹暟鎹簱琛?|
-| [寮€鍙戞椂闂寸嚎.md](./寮€鍙戞椂闂寸嚎.md) | 鍘熻鍒掑拰褰撳墠闆嗘垚杩涘害瀵圭収 |
-| [鍓嶇璁捐瑙勮寖.md](./鍓嶇璁捐瑙勮寖.md) | 鍓嶇甯冨眬銆侀鑹层€佺粍浠惰鑼?|
-| [鍓嶇缇庡寲娓呭崟.md](./鍓嶇缇庡寲娓呭崟.md) | 鏀跺熬闃舵 UI 鎵撶（娓呭崟 |
+---
 
-## 寮€鍙戞棩蹇?
-| 闃熷憳 | 鏃ュ織 | 鍒嗘敮 |
-|:--|:--|:--|
-| 闃熷憳A | [闃熷憳A-鏅鸿兘瀵硅瘽DJ.md](./devlogs/闃熷憳A-鏅鸿兘瀵硅瘽DJ.md) | `dev-chat` |
-| 闃熷憳B | [闃熷憳B-闊充箰涓績.md](./devlogs/闃熷憳B-闊充箰涓績.md) | `dev-music` |
-| 闃熷憳C | [闃熷憳C-姣忔棩鎺ㄨ崘.md](./devlogs/闃熷憳C-姣忔棩鎺ㄨ崘.md) | `dev-rec` |
-| 闃熷憳D | [闃熷憳D-鐢ㄦ埛涓績.md](./devlogs/闃熷憳D-鐢ㄦ埛涓績.md) | `dev-user` |
-| 妯℃澘 | [妯℃澘-寮€鍙戞棩蹇?md](./devlogs/妯℃澘-寮€鍙戞棩蹇?md) | - |
+## 技术文档
 
-## 绔彛閫熸煡
+| 文档 | 用途 |
+|:-----|:-----|
+| [架构设计.md](./架构设计.md) | 微服务架构图、技术选型、数据库表设计 → 答辩 PPT 引用 |
+| [API接口规范.md](./API接口规范.md) | 4 个模块的接口约定 → 前后端联调依据 |
+| [前端设计规范.md](./前端设计规范.md) | 颜色变量、面板样式、布局规则 → 保证界面风格统一 |
+| [module-chat-runtime.md](./module-chat-runtime.md) | 智能对话 DJ 运行依赖：DeepSeek、和风天气、验证命令 |
+| [module-music-runtime.md](./module-music-runtime.md) | 音乐中心额外依赖：网易云 API、DeepSeek、数据库初始化 |
 
-| 鏈嶅姟 | 绔彛 | 璇存槑 |
-|:--|:--:|:--|
-| 鍓嶇 Vite | 5173 | Vue3 鍗曢〉 DJ 鎺у埗鍙?|
-| Gateway | 8080 | 鍓嶇缁熶竴 HTTP/WebSocket 鍏ュ彛 |
-| module-chat | 8081 | AI 瀵硅瘽銆佸ぉ姘斻€佹椂闂淬€佸巻鍙?|
-| module-music | 8082 | 姝屾洸銆佹挱鏀惧櫒銆佹瓕鍗曘€佺綉鏄撲簯銆佹儏缁垎鏋?|
-| module-rec | 8083 | 鐑棬姒滃崟銆佹瘡鏃ユ帹鑽愩€佺浉浼兼帹鑽愩€佸亸濂芥爣绛?|
-| module-user | 8084 | 褰撳墠鍙湁鍋ュ悍妫€鏌ワ紝鍗犱綅寰呭畬鍠?|
-| NeteaseCloudMusicApi | 3000 | 姣忓彴鏈哄櫒鏈湴鍚姩锛屼笉闅?Git 鑷姩杩愯 |
-| MySQL | 3306 | `mall`銆乣dj_music_radio` 鏁版嵁搴?|
-| Redis | 6379 | 鎺ㄨ崘鐑棬姒滃崟 |
-| RabbitMQ | 5672 / 15672 | 姝屽崟瀵煎叆銆佹帹鑽愰€氱煡 |
-| Nacos | 8848 | 鏈嶅姟娉ㄥ唽鍙戠幇 |
+---
 
-## 褰撳墠闆嗘垚鐘舵€?
-- `dev-chat` 宸叉暣鍚堥槦鍛楢銆侀煶涔愪腑蹇冦€佹帹鑽愭ā鍧楃殑鏈€鏂颁富瑕佷唬鐮侊紝姣?`master` 鏇存柊銆?- 鏅鸿兘瀵硅瘽宸叉帴鍏?DeepSeek 宸ュ叿瑙勫垝涓庡洖澶嶇敓鎴愶紝鍙皟鐢ㄩ煶涔愩€佹帹鑽愩€佸ぉ姘斻€佹椂闂淬€佹祻瑙堝櫒瀹氫綅宸ュ叿銆?- 闊充箰涓績宸插寘鍚湰鍦版瓕鏇插簱銆佹瓕鍗曘€佹敹钘忋€佸巻鍙层€佺綉鏄撲簯浠ｇ悊銆佹瓕璇嶅拰鎯呯华鍒嗘瀽銆?- 鎺ㄨ崘妯″潡宸插寘鍚儹闂ㄦ鍗曘€佺敤鎴疯涓恒€佹瘡鏃ユ帹鑽愩€佺浉浼兼帹鑽愩€佸亸濂芥爣绛俱€?- 鐢ㄦ埛涓績褰撳墠浠嶆槸鍗犱綅妯″潡锛屽彧鏈?`/user/hello`锛岀櫥褰?JWT/鐢ㄦ埛璧勬枡寰呴槦鍛楧鍚庣画琛ラ綈銆?
-## 閲嶈绾﹀畾
+## 环境速查
 
-- 涓嶈鎶?`DEEPSEEK_API_KEY`銆乣QWEATHER_API_KEY`銆佹暟鎹簱瀵嗙爜绛夌湡瀹炲瘑閽ユ彁浜ゅ埌 Git銆?- 缃戞槗浜戞悳绱?鎾斁渚濊禆鏈満 `NeteaseCloudMusicApi:3000`锛屾瘡涓紑鍙戣€呴兘瑕佽嚜宸卞惎鍔ㄣ€?- 鏁版嵁搴撴暟鎹笉闅?Git 鍚屾銆傛媺浠撳簱鍚庡鏋滄瓕搴撲负绌猴紝闇€瑕佹墽琛?SQL 骞跺鍏ユ瓕鍗曟垨姝屾洸銆?- 杩滅 Windows 寮€鍙戠幆澧冭閬靛畧浠撳簱澶栧眰鐨?`remote-windows-dev-env.md`锛屼笉瑕佸湪 Mac 鏈湴鐩存帴璺?Java/Vue銆?
+| 服务 | 端口 | 启动命令 |
+|:-----|:----:|:---------|
+| MySQL | 3306 | `brew services start mysql` |
+| Redis | 6379 | `brew services start redis` |
+| RabbitMQ | 5672 | `brew services start rabbitmq` |
+| Nacos | 8848 | `bash ~/environment/nacos/bin/startup.sh -m standalone` |
+| 全量安装 | — | `mvn install -DskipTests` |
+| Gateway | 8080 | `mvn spring-boot:run -pl gateway` |
+| module-chat | 8081 | `mvn spring-boot:run -pl module-chat` |
+| module-music | 8082 | `mvn spring-boot:run -pl module-music` |
+| module-rec | 8083 | `mvn spring-boot:run -pl module-rec` |
+| module-user | 8084 | `mvn spring-boot:run -pl module-user` |
+| VUE3 前端 | 5173 | `cd frontend && npm run dev` |
+| 网易云 API 代理 | 3000 | `powershell -ExecutionPolicy Bypass -File scripts/netease/start-netease-api.ps1` |
+
+> 详细配置步骤见 [组员开发手册.md](./组员开发手册.md) 第二步。
+
+---
+
+## 个人开发日志
+
+| 队员 | 日志 | Git 分支 |
+|:---|:-----|:-----|
+| 队员A | [队员A-智能对话DJ.md](./devlogs/队员A-智能对话DJ.md) | `dev-chat` |
+| 队员B | [队员B-音乐中心.md](./devlogs/队员B-音乐中心.md) | `dev-music` |
+| 队员C | [队员C-每日推荐.md](./devlogs/队员C-每日推荐.md) | `dev-rec` |
+| 队员D | [队员D-用户中心.md](./devlogs/队员D-用户中心.md) | `dev-user` |
+| 参考 | [模板-开发日志.md](./devlogs/模板-开发日志.md) | — |
+
+---
+
+## 文件结构
+
+```
+dj-music-radio/
+├── pom.xml                  ← 父 POM (Spring Boot 3.4.5 + Cloud 2024.0.1)
+├── common/                  ← 公共模块
+├── gateway/                 ← API 网关 :8080
+├── module-chat/             ← 队员A 微服务 :8081
+├── module-music/            ← 队员B 微服务 :8082
+├── module-rec/              ← 队员C 微服务 :8083
+├── module-user/             ← 队员D 微服务 :8084
+├── frontend/                ← VUE3 前端 :5173
+└── docs/                    ← 📚 文档（你在这里）
+```

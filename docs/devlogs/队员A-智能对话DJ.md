@@ -1,68 +1,67 @@
-# 闃熷憳A 寮€鍙戞棩蹇?鈥?鏅鸿兘瀵硅瘽DJ妯″潡
+# 队员A 开发日志 — 智能对话DJ模块
 
-> 濮撳悕锛歘_____  鍒嗘敮锛歚dev-chat`  鍚庣锛歮odule-chat (:8081)
-
----
-
-## 璐熻矗鍐呭
-- 馃挰 AI 瀵硅瘽闈㈡澘锛圕hatPanel.vue锛?
-- 鈽€锔?澶╂皵灏忛儴浠讹紙WeatherWidget.vue锛?
-- WebSocket 瀹炴椂閫氫俊
-- 鏃舵鎰熺煡 DJ 娆㈣繋璇?
-- 澶╂皵 API 鎺ュ叆锛堝拰椋庡ぉ姘旓級
+> 姓名：______  分支：`dev-chat`  后端：module-chat (:8081)
 
 ---
 
-## 绗?澶╋紙鏃ユ湡锛?026-07-16锛?
-- [x] 浠?`master` 鍒涘缓闃熷憳A寮€鍙戝垎鏀?`dev-chat`
-- [x] 瀹屾垚 `POST /chat/send` 鍩虹瀵硅瘽鎺ュ彛锛屾敮鎸佸叧閿瘝鐢熸垚 DJ 鍥炲鍜岀ず渚嬫瓕鏇叉帹鑽?
-- [x] 瀹屾垚 `GET /chat/history` 鏈€杩戞秷鎭煡璇㈡帴鍙ｏ紝褰撳墠闃舵浣跨敤鍐呭瓨淇濆瓨鏈€杩?10 鏉¤褰?
-- [x] 瀹屾垚 `GET /chat/weather` 澶╂皵灞曠ず鎺ュ彛锛屽厛杩斿洖婕旂ず澶╂皵鏁版嵁鍜屾椂娈甸棶鍊?
-- [x] `ChatPanel.vue` 鎺ュ叆鐪熷疄鍚庣鎺ュ彛锛屾浛鎹㈠墠绔亣鍥炲閫昏緫
-- [x] `WeatherWidget.vue` 鎺ュ叆澶╂皵鎺ュ彛锛屽睍绀哄煄甯傘€佹俯搴︺€佸ぉ姘斿拰闂€欒
-- [x] 楠岃瘉閫氳繃锛氬墠绔?`npm run build`銆佸悗绔?Maven 鎵撳寘銆丟ateway `/chat/send` `/chat/history` `/chat/weather` 鑱旇皟
-- [x] 鏂板 `ChatService`锛孯EST 鍜?WebSocket 鍏辩敤瀵硅瘽鍥炲銆佹帹鑽愭瓕鏇插拰鍘嗗彶璁板綍閫昏緫
-- [x] 鏂板 `/chat/ws` WebSocket 绔偣锛屾敮鎸?`{ type, userId, content }` 娑堟伅骞惰繑鍥?`{ type, content, songs, time }`
-- [x] `ChatPanel.vue` 浼樺厛浣跨敤 WebSocket 瀹炴椂瀵硅瘽锛岃繛鎺ヤ笉鍙敤鏃朵繚鐣?REST 闄嶇骇鍙戦€?
-- [x] 楠岃瘉閫氳繃锛氬墠绔瀯寤恒€佸畬鏁?Maven 鎵撳寘銆丟ateway WebSocket `ws://127.0.0.1:8080/chat/ws` 鏀跺彂娑堟伅銆佸墠绔?5173 鍙闂?
-- [x] 鏂板 `chat_history` 琛ㄨ剼鏈€乣ChatHistory` 瀹炰綋鍜?`ChatHistoryMapper`
-- [x] `module-chat` 鎺ュ叆 MyBatis Plus 鍜?MySQL 閰嶇疆锛宍ChatService` 鏀寔浼樺厛璇诲啓鏁版嵁搴撱€佸紓甯告椂鍐呭瓨闄嶇骇
-- [x] 楠岃瘉閫氳繃锛歚module-chat -am package -DskipTests`锛孏ateway REST/WS 瀵硅瘽鎺ュ彛姝ｅ父杩斿洖锛宍/chat/history` 杩斿洖鏈€杩戞秷鎭?
-- [x] 閰嶇疆 `MYSQL_PASSWORD` 鐜鍙橀噺锛屾墽琛?`chat_history.sql` 寤鸿〃锛岄獙璇侀噸鍚?`module-chat` 鍚庝粛鑳戒粠 MySQL 璇诲洖鍘嗗彶璁板綍
-- [x] 浼樺寲 `ChatPanel.vue` 瀵硅瘽闈㈡澘鏍峰紡锛岃皟鏁村乏鍙虫秷鎭皵娉°€佽繛鎺ョ姸鎬併€佽緭鍏ュ尯鍜屽彂閫佹寜閽?
-- [x] 鏂板 `WeatherService`锛屾敮鎸侀€氳繃 `QWEATHER_API_KEY` 鎺ュ叆鍜岄澶╂皵鍩庡競鏌ヨ鍜屽疄鏃跺ぉ姘旀帴鍙?
-- [x] `WeatherWidget.vue` 澧炲姞鍔犺浇鎬併€佸け璐ユ€佸拰鍒锋柊鎸夐挳锛涙湭閰嶇疆澶╂皵 API key 鏃惰嚜鍔ㄦ樉绀烘紨绀哄ぉ姘?
-- [x] 楠岃瘉閫氳繃锛氬墠绔瀯寤恒€乣module-chat -am package -DskipTests`銆丟ateway `/chat/weather?city=鍖椾含` 杩斿洖婕旂ず闄嶇骇鏁版嵁
+## 负责内容
+- 💬 AI 对话面板（ChatPanel.vue）
+- ☀️ 天气小部件（WeatherWidget.vue）
+- WebSocket 实时通信
+- 时段感知 DJ 欢迎语
+- 天气 API 接入（和风天气）
 
-## 绗?澶╋紙鏃ユ湡锛歘_____锛?
-- [ ]
+---
 
-## 绗?澶╋紙鏃ユ湡锛歘_____锛?
-- [ ]
+## 第1天（日期：2026-07-16）
+- [x] 从 `master` 创建队员A开发分支 `dev-chat`
+- [x] 完成 `POST /chat/send` 基础对话接口，支持关键词生成 DJ 回复和示例歌曲推荐
+- [x] 完成 `GET /chat/history` 最近消息查询接口，当前阶段使用内存保存最近 10 条记录
+- [x] 完成 `GET /chat/weather` 天气展示接口，先返回演示天气数据和时段问候
+- [x] `ChatPanel.vue` 接入真实后端接口，替换前端假回复逻辑
+- [x] `WeatherWidget.vue` 接入天气接口，展示城市、温度、天气和问候语
+- [x] 验证通过：前端 `npm run build`、后端 Maven 打包、Gateway `/chat/send` `/chat/history` `/chat/weather` 联调
+- [x] 新增 `ChatService`，REST 和 WebSocket 共用对话回复、推荐歌曲和历史记录逻辑
+- [x] 新增 `/chat/ws` WebSocket 端点，支持 `{ type, userId, content }` 消息并返回 `{ type, content, songs, time }`
+- [x] `ChatPanel.vue` 优先使用 WebSocket 实时对话，连接不可用时保留 REST 降级发送
+- [x] 验证通过：前端构建、完整 Maven 打包、Gateway WebSocket `ws://127.0.0.1:8080/chat/ws` 收发消息、前端 5173 可访问
+- [x] 新增 `chat_history` 表脚本、`ChatHistory` 实体和 `ChatHistoryMapper`
+- [x] `module-chat` 接入 MyBatis Plus 和 MySQL 配置，`ChatService` 支持优先读写数据库、异常时内存降级
+- [x] 验证通过：`module-chat -am package -DskipTests`，Gateway REST/WS 对话接口正常返回，`/chat/history` 返回最近消息
+- [x] 配置 `MYSQL_PASSWORD` 环境变量，执行 `chat_history.sql` 建表，验证重启 `module-chat` 后仍能从 MySQL 读回历史记录
+- [x] 优化 `ChatPanel.vue` 对话面板样式，调整左右消息气泡、连接状态、输入区和发送按钮
+- [x] 新增 `WeatherService`，支持通过 `QWEATHER_API_KEY` 接入和风天气城市查询和实时天气接口
+- [x] `WeatherWidget.vue` 增加加载态、失败态和刷新按钮；未配置天气 API key 时自动显示演示天气
+- [x] 验证通过：前端构建、`module-chat -am package -DskipTests`、Gateway `/chat/weather?city=北京` 返回演示降级数据
 
-## 绗?澶╋紙鏃ユ湡锛歘_____锛?
-- [ ]
+## 第2天（日期：______）
+- [ ] 
+
+## 第3天（日期：______）
+- [ ] 
+
+## 第4天（日期：______）
+- [ ] 
 
 
-## 2026-07-16 琛ュ厖璁板綍
-- [x] 鏂板 `MusicRecommendationClient` 鍜?`RecRecommendationClient`锛岄€氳繃 OpenFeign 棰勬帴鍏?module-music/module-rec 鎺ㄨ崘鑳藉姏
-- [x] `ChatService` 浼樺厛璋冪敤杩滅▼鎺ㄨ崘鎺ュ彛锛岄槦鍙嬫帴鍙ｆ湭瀹屾垚鎴栦笉鍙敤鏃惰嚜鍔ㄩ檷绾у埌鏈湴 3 棣栨瓕鏇叉帹鑽?
-- [x] 楠岃瘉閫氳繃锛歚module-chat -am package -DskipTests`銆佸惎鍔?8081銆丟ateway `/chat/send` 杩斿洖鎺ㄨ崘鍒楄〃銆乣/chat/history` 鍙煡璇㈡秷鎭?
-- [x] 鏂板 `DeepSeekChatClient`锛屽鐢?DeepSeek OpenAI 鍏煎鎺ュ彛锛屽鐢ㄦ埛娑堟伅鍋氭剰鍥捐В鏋愶紙鎯呯华銆佸満鏅€佹洸椋庛€佹瓕鎵嬨€佹悳绱㈠叧閿瘝銆佹槸鍚﹂渶瑕佹帹鑽愶級
-- [x] `ChatService` 鏀逛负 AI 鎰忓浘瑙ｆ瀽 鈫?璋冪敤 music/rec 鑾峰彇鐪熷疄姝屾洸 鈫?AI 鐢熸垚 DJ 鍥炲锛涙棤 DeepSeek key 鎴栬皟鐢ㄥけ璐ユ椂淇濈暀鍘熻鍒欏厹搴?
-- [x] `module-chat` 鏂板 `DEEPSEEK_API_KEY` / `DEEPSEEK_API_URL` / `DEEPSEEK_MODEL` 鐜鍙橀噺閰嶇疆锛岄伩鍏嶆妸 key 缁х画鍐欏叆鏂版ā鍧楅厤缃?
-- [x] 楠岃瘉閫氳繃锛歚module-chat -am package -DskipTests`锛汫ateway `/chat/send` 闊充箰鎰忓浘璇锋眰杩斿洖 3 棣栨瓕锛屾櫘閫氶棶鍊欒繑鍥?`songs=[]`
-- [x] 淇 AI 瀵硅瘽杈圭晫锛欴eepSeek 鎰忓浘瑙ｆ瀽浼犲叆鏈€杩戝璇濆巻鍙诧紝鏀寔鈥滆繕鏈夊暐鈥濃€滆鍚р€濈瓑鐭拷闂紱鏅€氳亰澶?璁叉晠浜嬩笉鍐嶅己鍒跺洖鍒版瓕鍗曟帹鑽?
-- [x] 楠岃瘉閫氳繃锛歚/chat/send` 杩炵画瀵硅瘽涓紝闊充箰杩介棶淇濈暀 `songs=3`锛岃鏁呬簨鍜岀户缁鏁呬簨杩斿洖 `songs=0`
+## 2026-07-16 补充记录
+- [x] 新增 `MusicRecommendationClient` 和 `RecRecommendationClient`，通过 OpenFeign 预接入 module-music/module-rec 推荐能力
+- [x] `ChatService` 优先调用远程推荐接口，队友接口未完成或不可用时自动降级到本地 3 首歌曲推荐
+- [x] 验证通过：`module-chat -am package -DskipTests`、启动 8081、Gateway `/chat/send` 返回推荐列表、`/chat/history` 可查询消息
+- [x] 新增 `DeepSeekChatClient`，复用 DeepSeek OpenAI 兼容接口，对用户消息做意图解析（情绪、场景、曲风、歌手、搜索关键词、是否需要推荐）
+- [x] `ChatService` 改为 AI 意图解析 → 调用 music/rec 获取真实歌曲 → AI 生成 DJ 回复；无 DeepSeek key 或调用失败时保留原规则兜底
+- [x] `module-chat` 新增 `DEEPSEEK_API_KEY` / `DEEPSEEK_API_URL` / `DEEPSEEK_MODEL` 环境变量配置，避免把 key 继续写入新模块配置
+- [x] 验证通过：`module-chat -am package -DskipTests`；Gateway `/chat/send` 音乐意图请求返回 3 首歌，普通问候返回 `songs=[]`
+- [x] 修复 AI 对话边界：DeepSeek 意图解析传入最近对话历史，支持“还有啥”“讲吧”等短追问；普通聊天/讲故事不再强制回到歌单推荐
+- [x] 验证通过：`/chat/send` 连续对话中，音乐追问保留 `songs=3`，讲故事和继续讲故事返回 `songs=0`
 
-## 2026-07-17 琛ュ厖璁板綍
-- [x] 鏄庣‘澶╂皵妯″潡鐪熷疄/婕旂ず鏁版嵁杈圭晫锛歚GET /chat/weather` 鏂板 `message` 瀛楁锛岃繑鍥炲拰椋庡ぉ姘斿疄鏃舵暟鎹垨婕旂ず闄嶇骇鍘熷洜
-- [x] `WeatherService` 鏀寔 `QWEATHER_API_HOST`锛屽吋瀹瑰拰椋庡ぉ姘旀柊鐗堜笓灞?API Host锛涗繚鐣?`QWEATHER_WEATHER_URL` / `QWEATHER_GEO_URL` 鎵嬪姩瑕嗙洊鑳藉姏
-- [x] `WeatherWidget.vue` 鏄剧ず鈥滃疄鏃?/ 婕旂ず鏁版嵁鈥濇潵婧愭爣璇嗭紝榧犳爣鎮仠鍙煡鐪嬪悗绔繑鍥炵殑鏉ユ簮璇存槑
-- [x] `WeatherWidget.vue` 浼樺厛浣跨敤娴忚鍣ㄥ畾浣嶇粡绾害鏌ヨ澶╂皵锛涘畾浣嶆嫆缁濄€佽秴鏃舵垨涓嶅彲鐢ㄦ椂鍥為€€榛樿鍩庡競鍖椾含
-- [x] `ChatPanel.vue` 灏嗗畾浣嶅煄甯備紶缁?`/chat/send` 鍜?`/chat/ws`锛沗ChatService` 鏀寔浣跨敤鍓嶇鍩庡競鎴栨渶杩戝ぉ姘斾笂涓嬫枃鍥炵瓟鈥滄垜杩欓噷/浠婂ぉ鐨勫ぉ姘斺€濈瓑鐪佺暐鍩庡競鐨勯棶棰?
-- [x] 灏嗘祻瑙堝櫒瀹氫綅鍗囩骇涓?`location.current` 瀹㈡埛绔伐鍏凤細DeepSeek 鍙鍒掕宸ュ叿锛屽悗绔€氳繃 WebSocket 杩斿洖 `tool_request`锛屽墠绔墽琛屽畾浣嶅悗甯?`context.location` 缁х画鍘熷璇?
-- [x] 鏂板 `TimeWidget.vue` 椤舵爮鏃堕棿鏃ユ湡缁勪欢锛屾偓娴樉绀哄畬鏁存棩鏈熴€佸綋鍓嶆椂闂村拰鏃跺尯锛涙柊澧?`time.current` 瀵硅瘽宸ュ叿
-- [x] 鎵╁睍 `GET /chat/weather` 瀹炴椂澶╂皵瀛楁锛宍WeatherWidget.vue` 鎮诞鏄剧ず浣撴劅銆佹箍搴︺€侀銆侀檷姘淬€佹皵鍘嬨€佽兘瑙佸害銆佷簯閲忓拰鏇存柊鏃堕棿
-- [x] 鏂板 [module-chat-runtime.md](../module-chat-runtime.md)锛岃褰?DeepSeek銆佸拰椋庡ぉ姘旂幆澧冨彉閲忋€佽繙绔鍒掍换鍔￠噸鍚拰澶╂皵鎺ュ彛楠岃瘉鏂瑰紡
-- [x] 瀹屾垚鏂囨。鏁村悎锛氭洿鏂?README銆丄PI 瑙勮寖銆佽繍琛屾墜鍐屻€佹€讳綋璁捐銆佹灦鏋勮璁°€佸紑鍙戞椂闂寸嚎锛屾柊澧炴柊浜鸿繍琛屾墜鍐屽拰椤圭洰瀹屾暣璇存槑涔?- [x] 鏄庣‘褰撳墠闆嗘垚鐘舵€侊細`dev-chat` 宸叉暣鍚?chat/music/rec锛寀ser 妯″潡浠嶆槸鍋ュ悍妫€鏌ュ崰浣?- [x] 灏嗘枃妗ｅ彛寰勮皟鏁翠负宸ュ叿鍨?AI 鏋舵瀯锛欴eepSeek 璐熻矗瑙勫垝鍜岃〃杈撅紝鐪熷疄鏁版嵁鏉ヨ嚜 music/rec/weather/time/location 宸ュ叿
+## 2026-07-17 补充记录
+- [x] 明确天气模块真实/演示数据边界：`GET /chat/weather` 新增 `message` 字段，返回和风天气实时数据或演示降级原因
+- [x] `WeatherService` 支持 `QWEATHER_API_HOST`，兼容和风天气新版专属 API Host；保留 `QWEATHER_WEATHER_URL` / `QWEATHER_GEO_URL` 手动覆盖能力
+- [x] `WeatherWidget.vue` 显示“实时 / 演示数据”来源标识，鼠标悬停可查看后端返回的来源说明
+- [x] `WeatherWidget.vue` 优先使用浏览器定位经纬度查询天气；定位拒绝、超时或不可用时回退默认城市北京
+- [x] `ChatPanel.vue` 将定位城市传给 `/chat/send` 和 `/chat/ws`；`ChatService` 支持使用前端城市或最近天气上下文回答“我这里/今天的天气”等省略城市的问题
+- [x] 将浏览器定位升级为 `location.current` 客户端工具：DeepSeek 可规划该工具，后端通过 WebSocket 返回 `tool_request`，前端执行定位后带 `context.location` 继续原对话
+- [x] 新增 `TimeWidget.vue` 顶栏时间日期组件，悬浮显示完整日期、当前时间和时区；新增 `time.current` 对话工具
+- [x] 扩展 `GET /chat/weather` 实时天气字段，`WeatherWidget.vue` 悬浮显示体感、湿度、风、降水、气压、能见度、云量和更新时间
+- [x] 新增 [module-chat-runtime.md](../module-chat-runtime.md)，记录 DeepSeek、和风天气环境变量、远端计划任务重启和天气接口验证方式
