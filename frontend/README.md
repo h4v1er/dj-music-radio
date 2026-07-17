@@ -73,4 +73,7 @@ npm.cmd run build
 - 天气和聊天定位使用浏览器 `navigator.geolocation`；
 - 聊天推荐歌曲点击后触发 `dj-play-song`；
 - MusicPanel 监听 `dj-play-song` 并播放对应歌曲；
-- UserBar 调用真实 user 接口完成登录/注册/退出，并通过 `dj-user-session-changed` 通知 ChatPanel、MusicPanel、RecPanel 使用当前用户 ID 刷新数据。
+- MusicPanel 会把当前播放队列、当前歌曲和播放模式持久化到 `/music/queue/state`，刷新页面后按当前用户恢复；
+- RecPanel 支持手动刷新今日推荐，并会根据当前用户 ID 加载每日推荐和偏好标签；
+- ChatPanel 支持放大/收回布局，PlayerCore 支持点击封面进入完整播放详情；
+- UserBar 调用真实 user 接口完成登录/注册/退出/修改密码，并通过 `dj-user-session-changed` 通知 ChatPanel、MusicPanel、RecPanel 使用当前用户 ID 刷新数据。

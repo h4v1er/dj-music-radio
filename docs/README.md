@@ -2,7 +2,7 @@
 
 仓库：`git@github.com:h4v1er/dj-music-radio.git`
 当前集成分支：`dev-chat`
-当前基准：已完成 `feat(user): 整合用户中心登录与会话联动`，并已整合 `music`、`rec`、`user` 模块阶段性最新实现。
+当前基准：已完成 chat、music、rec、user 四个模块阶段性整合，并继续完成播放队列持久化、推荐刷新、用户修改密码、界面动效、答辩一键启停脚本和最终文档复核。
 
 ## 先读哪几份
 
@@ -10,19 +10,21 @@
 |:--|:--|:--|
 | 1 | [新人运行手册.md](./新人运行手册.md) | 新人从 clone 到跑通全项目的操作步骤 |
 | 2 | [项目完整说明书.md](./项目完整说明书.md) | 答辩/PPT/项目文档素材，按当前代码完整说明 |
-| 3 | [API接口规范.md](./API接口规范.md) | 前后端联调、模块接口、响应结构 |
-| 4 | [架构设计.md](./架构设计.md) | 微服务架构、技术选型、数据流和部署关系 |
-| 5 | [组员开发手册.md](./组员开发手册.md) | 分支、提交、协作、合并规范 |
+| 3 | [项目文档-答辩版.md](./项目文档-答辩版.md) | 按老师 Word 模板整理的完整项目文档 Markdown |
+| 4 | [答辩PPT制作稿.md](./答辩PPT制作稿.md) | 按 PPT 示例扩展的逐页制作稿和可复制文案 |
+| 5 | [API接口规范.md](./API接口规范.md) | 前后端联调、模块接口、响应结构 |
+| 6 | [架构设计.md](./架构设计.md) | 微服务架构、技术选型、数据流和部署关系 |
+| 7 | [组员开发手册.md](./组员开发手册.md) | 分支、提交、协作、合并规范 |
 
 ## 模块文档
 
 | 模块 | 文档 | 当前状态 |
 |:--|:--|:--|
 | `module-chat` | [module-chat-runtime.md](./module-chat-runtime.md) | 已接 DeepSeek 工具规划、WebSocket、天气、时间、浏览器定位、music/rec 联动 |
-| `module-music` | [module-music-runtime.md](./module-music-runtime.md) | 已接本地歌库、网易云代理、歌单导入、歌词、情绪分析、收藏/历史 |
-| `module-rec` | [module-rec-runtime.md](./module-rec-runtime.md) | 已接 Redis 热榜、每日推荐、相似推荐、行为采集、RabbitMQ 通知 |
-| `module-user` | [module-user-runtime.md](./module-user-runtime.md) | 已接注册、登录、JWT、用户资料，收藏/历史通过 music 模块联动 |
-| `frontend` | [../frontend/README.md](../frontend/README.md) | 单屏 DJ 控制台，三栏布局，聊天推荐可点击播放 |
+| `module-music` | [module-music-runtime.md](./module-music-runtime.md) | 已接本地歌库、网易云代理、歌单导入、歌词、情绪分析、收藏/历史、用户播放队列持久化 |
+| `module-rec` | [module-rec-runtime.md](./module-rec-runtime.md) | 已接 Redis 热榜、每日推荐、手动刷新、相似推荐、行为采集、RabbitMQ 通知 |
+| `module-user` | [module-user-runtime.md](./module-user-runtime.md) | 已接注册、登录、JWT、用户资料、修改密码，收藏/历史通过 music 模块联动 |
+| `frontend` | [../frontend/README.md](../frontend/README.md) | 单屏 DJ 控制台，聊天可放大、封面可进入播放详情、聊天推荐可点击播放 |
 
 ## 当前真实服务清单
 

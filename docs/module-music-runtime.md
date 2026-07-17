@@ -12,7 +12,8 @@
 - 歌词保存；
 - DeepSeek 或关键词情绪分析；
 - 用户品味画像；
-- 收藏和播放历史。
+- 收藏和播放历史；
+- 用户播放队列、当前歌曲和播放模式持久化。
 
 ## 2. 必要依赖
 
@@ -41,11 +42,12 @@
 
 ```text
 module-music/src/main/resources/init.sql
+module-music/src/main/resources/queue_schema.sql
 module-music/src/main/resources/emotion_schema.sql
 module-music/src/main/resources/emotion_keywords.sql
 ```
 
-注意：`init.sql` 会 `DROP TABLE` 并重建 music 主表，已有数据会被清掉。真实演示环境不要随便重复执行。
+注意：`init.sql` 会 `DROP TABLE` 并重建 music 主表，已有数据会被清掉。已有演示数据的环境如果只缺播放队列表，应单独执行 `queue_schema.sql`，不要重复执行 `init.sql`。
 
 ## 5. 网易云 API 代理
 
@@ -107,7 +109,26 @@ song.emotion_analyzed
 user_taste
 ```
 
-## 8. 验证命令
+## 8. 播放队列持久化
+
+前端 `MusicPanel.vue` 会在播放、加入队列、移除队列、切换播放模式时调用：
+
+```text
+GET /music/queue/state?userId=1
+PUT /music/queue/state
+DELETE /music/queue/state?userId=1
+```
+
+后端把队列快照写入：
+
+```text
+user_play_queue
+user_player_state
+```
+
+这样登录用户刷新页面后仍能恢复播放队列、当前歌曲和 `order/shuffle/repeat` 播放模式。网易云歌曲没有本地 `song.id` 时，会保存 `source/sourceId/title/artist/coverUrl/filePath` 等快照，避免刷新后只剩一个平台 ID。
+
+## 9. 验证命令
 
 ```powershell
 Invoke-RestMethod "http://127.0.0.1:8080/music/hello"
@@ -116,4 +137,5 @@ Invoke-RestMethod "http://127.0.0.1:8080/music/song/genres"
 Invoke-RestMethod "http://127.0.0.1:8080/music/netease/ping"
 Invoke-RestMethod "http://127.0.0.1:8080/music/favorite/list?userId=1"
 Invoke-RestMethod "http://127.0.0.1:8080/music/history/list?userId=1"
+Invoke-RestMethod "http://127.0.0.1:8080/music/queue/state?userId=1"
 ```

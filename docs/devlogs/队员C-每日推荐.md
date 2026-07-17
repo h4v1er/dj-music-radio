@@ -19,7 +19,7 @@
 - [x] 搭建 module-rec 后端框架，完成 `GET /rec/hello` 服务健康检查
 - [x] 完成 `GET /rec/hot` 热门榜单接口，Redis ZSET 反向排序返回 TOP10
 - [x] 完成 `POST /rec/behavior` 用户行为上报接口，行为计分（play+1/like+3/share+2）写库同步更新 Redis
-- [x] 完成 `GET /rec/similar?songId=` 相似歌曲推荐，四层策略（同流派→同歌手→行为协同过滤→空列表）
+- [x] 完成 `GET /rec/similar?songId=` 相似歌曲推荐，当前整合版会结合情绪标签、有效流派、同歌手和行为协同过滤补足结果
 - [x] 完成 `GET /rec/daily?userId=` 今日推荐查询接口
 - [x] 完成 `GET /rec/preferences?userId=` 用户偏好标签接口，从行为数据统计流派频次
 - [x] 新增 `MusicFeignClient` 通过 OpenFeign 调用 module-music，含 `MusicFeignFallback` 回退工厂
@@ -39,6 +39,9 @@
 - [x] 前端 `RecPanel.vue` 已接入热门榜、今日推荐、偏好标签
 - [x] 当前文档已补充 [module-rec-runtime.md](../module-rec-runtime.md)，记录运行依赖、数据表、推荐逻辑和验证命令
 - [x] 补充正式 SQL 初始化脚本：`module-rec/src/main/resources/sql/rec_tables.sql`
+- [x] 新增 `/rec/daily/refresh` 手动刷新接口，便于按当前用户最新播放/收藏行为重新生成今日推荐
+- [x] 推荐策略从单一 genre 扩展为 emotionTags、有效 genre、artist、协同过滤、album、duration 多维度补足
+- [x] 前端 `RecPanel.vue` 增加刷新按钮，推荐项可点击播放并联动 MusicPanel
 
 ## 第3天（日期：______）
 - [ ] 

@@ -7,7 +7,7 @@
 
 统一响应并未完全一致：
 
-- `module-music` 使用 `Result<T>`：`{ "code": 200, "msg": "success", "data": ... }`；
+- `module-music` 使用 `Result<T>`：`{ "code": 200, "message": "success", "data": ... }`；
 - `module-chat`、`module-rec` 多数接口直接返回对象、数组或字符串；
 - `module-user` 使用 `{ "code": 200, "message": "success", "data": ... }`；
 - 文档下方按真实代码分别说明。
@@ -191,7 +191,7 @@
 所有接口基础路径：`/music`。成功响应一般为：
 
 ```json
-{ "code": 200, "msg": "success", "data": {} }
+{ "code": 200, "message": "success", "data": {} }
 ```
 
 ### 3.1 歌曲
@@ -268,6 +268,42 @@
 | `GET` | `/music/history/list?userId=1` | 最近播放历史 |
 | `POST` | `/music/history` | 记录播放，body: `{ "userId": 1, "songId": 10 }` |
 
+### 3.6 用户播放队列
+
+| 方法 | 路径 | 说明 |
+|:--|:--|:--|
+| `GET` | `/music/queue/state?userId=1` | 查询用户当前播放队列、当前歌曲和播放模式 |
+| `PUT` | `/music/queue/state` | 保存用户播放队列状态 |
+| `DELETE` | `/music/queue/state?userId=1` | 清空用户播放队列状态 |
+
+保存请求：
+
+```json
+{
+  "userId": 1,
+  "playMode": "order",
+  "currentSong": {
+    "id": 10,
+    "title": "歌曲名",
+    "artist": "歌手",
+    "source": "NETEASE",
+    "sourceId": "网易云歌曲ID"
+  },
+  "queue": [
+    {
+      "id": 10,
+      "title": "歌曲名",
+      "artist": "歌手",
+      "source": "NETEASE",
+      "sourceId": "网易云歌曲ID",
+      "coverUrl": "",
+      "filePath": "",
+      "duration": 240
+    }
+  ]
+}
+```
+
 ## 4. module-rec
 
 `module-rec` 当前直接返回数组或字符串。
@@ -277,6 +313,7 @@
 | `GET` | `/rec/hello` | 健康检查 |
 | `GET` | `/rec/hot` | Redis 热门榜 TOP10 |
 | `GET` | `/rec/daily?userId=1` | 今日推荐 |
+| `POST` | `/rec/daily/refresh?userId=1` | 根据最新行为手动刷新今日推荐 |
 | `GET` | `/rec/similar?songId=1` | 相似歌曲 |
 | `POST` | `/rec/behavior` | 上报用户行为 |
 | `GET` | `/rec/preferences?userId=1` | 用户偏好标签 |

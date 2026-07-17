@@ -8,7 +8,7 @@
 - `POST /user/register` 用户注册；
 - `POST /user/login` 用户登录并返回 JWT；
 - `GET /user/info` 根据 Authorization token 查询当前用户；
-- `PUT /user/info` 更新当前用户昵称、头像、手机号、邮箱等资料；
+- `PUT /user/info` 更新当前用户昵称、头像 URL、手机号、邮箱等资料；
 - `PUT /user/password` 校验原密码后修改当前用户密码；
 - `GET /user/favorite/list` 查询当前用户收藏歌曲；
 - `POST /user/favorite/{songId}` / `POST /user/favorite/add?songId=` 添加收藏；
@@ -67,6 +67,8 @@ dj_user
 | MySQL `dj_music_radio` | music 模块收藏/历史数据 |
 
 Redis 当前已在配置中保留，但本阶段还没有验证码或 session 存储逻辑。
+
+当前未实现：注册验证码、找回密码、真实头像文件上传、Gateway 全局鉴权过滤器。头像字段可以保存 URL 字符串，但没有后端文件上传存储。
 
 ## 6. 验证命令
 
