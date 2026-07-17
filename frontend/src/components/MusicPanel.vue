@@ -4,7 +4,7 @@
  * 功能: 播放器 + 歌单管理 + 搜索 + 收藏 + 历史 + 导入
  * 后端: module-music (:8082)  MySQL + RabbitMQ
  */
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import api, { getCoverUrl } from '../api/music'
 import { recApi } from '../api/rec'
 import PlayerCore from './music/PlayerCore.vue'
@@ -36,6 +36,9 @@ const selectedAddPlaylistId = ref(null)
 const addPlaylistLoading = ref(false)
 const addPlaylistMessage = ref('')
 const quickPlaylistName = ref('')
+const restoringQueue = ref(false)
+let queueSyncTimer = null
+let queueDirtyDuringRestore = false
 
 // ── 数据 ──
 const allSongs = ref([])
@@ -70,15 +73,17 @@ const tabLabel = computed(() => {
 
 // ── 播放逻辑 ──
 async function playSong(song) {
-  currentSong.value = song
-  if (!playQueue.value.find(s => s.id === song.id)) {
-    playQueue.value.push(song)
+  const playableSong = normalizeQueueSong(song)
+  currentSong.value = playableSong
+  if (!playQueue.value.find(s => queueSongKey(s) === queueSongKey(playableSong))) {
+    playQueue.value.push(playableSong)
   }
+  scheduleSaveQueueState()
 
   // 网易云歌曲（导入歌单/搜索结果），无本地文件时需获取在线播放URL + 歌词
-  if ((song.source === 'NETEASE' || song._netease) && !song.filePath) {
+  if ((playableSong.source === 'NETEASE' || playableSong._netease) && !playableSong.filePath) {
     try {
-      const neteaseId = song.sourceId || song.id
+      const neteaseId = playableSong.sourceId || playableSong.id
       const [urlRes, lyricRes] = await Promise.all([
         api.neteaseUrl(neteaseId),
         api.neteaseLyric(neteaseId)
@@ -86,39 +91,43 @@ async function playSong(song) {
       // 设置播放URL
       const urlData = urlRes.data?.data
       if (urlData && urlData.length > 0 && urlData[0].url) {
-        song.filePath = urlData[0].url
+        playableSong.filePath = urlData[0].url
       }
       // 设置歌词
       const lyricData = lyricRes.data?.data
       if (lyricData?.lrc?.lyric) {
-        song.lyric = lyricData.lrc.lyric
+        playableSong.lyric = lyricData.lrc.lyric
         // 异步持久化歌词到后端（供情绪分析使用）
-        api.saveLyric(song.id, song.lyric).catch(() => {})
+        api.saveLyric(playableSong.id, playableSong.lyric).catch(() => {})
       }
       // 补封面（导入时可能为空）
-      if (!song.coverUrl && song.sourceId) {
+      if (!playableSong.coverUrl && playableSong.sourceId) {
         try {
-          const detailRes = await api.neteaseDetail(String(song.sourceId))
+          const detailRes = await api.neteaseDetail(String(playableSong.sourceId))
           const detailSongs = detailRes.data?.data || []
           if (detailSongs.length > 0) {
             const picUrl = (detailSongs[0].al || {}).picUrl || ''
-            song.coverUrl = picUrl.startsWith('http://') ? picUrl.replace('http://', 'https://') : picUrl
+            playableSong.coverUrl = picUrl.startsWith('http://') ? picUrl.replace('http://', 'https://') : picUrl
           }
         } catch (e) { /* ignore */ }
       }
-      currentSong.value = { ...song }
+      currentSong.value = { ...playableSong }
+      playQueue.value = playQueue.value.map(item =>
+        queueSongKey(item) === queueSongKey(playableSong) ? { ...playableSong } : item
+      )
+      scheduleSaveQueueState()
     } catch (e) {
       console.error('获取网易云播放URL失败', e)
     }
   }
 
   // 记录播放历史
-  api.recordPlay(song.id)
+  api.recordPlay(playableSong.id)
     .then(() => window.dispatchEvent(new CustomEvent('dj-user-library-changed', { detail: { type: 'history' } })))
     .catch(() => {})
-  reportRecBehavior(song, 'play')
+  reportRecBehavior(playableSong, 'play')
   // 检查收藏状态
-  checkFavStatus(song)
+  checkFavStatus(playableSong)
 }
 
 async function playNext() {
@@ -148,23 +157,28 @@ async function playPrev() {
 }
 
 function addToQueue(song) {
-  if (!playQueue.value.find(s => s.id === song.id)) {
-    playQueue.value.push(song)
+  const queuedSong = normalizeQueueSong(song)
+  if (!playQueue.value.find(s => queueSongKey(s) === queueSongKey(queuedSong))) {
+    playQueue.value.push(queuedSong)
   }
   queueExpanded.value = true
+  scheduleSaveQueueState()
 }
 
 function removeFromQueue(song) {
-  playQueue.value = playQueue.value.filter(item => item.id !== song.id)
-  if (currentSong.value?.id === song.id) {
+  const key = queueSongKey(song)
+  playQueue.value = playQueue.value.filter(item => queueSongKey(item) !== key)
+  if (queueSongKey(currentSong.value) === key) {
     currentSong.value = playQueue.value[0] || null
   }
   if (playQueue.value.length === 0) queueExpanded.value = false
+  scheduleSaveQueueState()
 }
 
 function clearQueue() {
   playQueue.value = currentSong.value ? [currentSong.value] : []
   queueExpanded.value = false
+  scheduleSaveQueueState()
 }
 
 function isLocalSong(song) {
@@ -320,39 +334,45 @@ async function searchNetease() {
 }
 
 async function playNeteaseSong(song) {
-  currentSong.value = song
-  if (!playQueue.value.find(s => s.id === song.id)) {
-    playQueue.value.push(song)
+  const neteaseSong = normalizeQueueSong({ ...song, source: 'NETEASE', sourceId: String(song.sourceId || song.id), _netease: true })
+  currentSong.value = neteaseSong
+  if (!playQueue.value.find(s => queueSongKey(s) === queueSongKey(neteaseSong))) {
+    playQueue.value.push(neteaseSong)
   }
+  scheduleSaveQueueState()
 
   try {
     // 并行获取播放URL、歌词、详情（补充封面）
     const [urlRes, lyricRes, detailRes] = await Promise.all([
-      api.neteaseUrl(song.id),
-      api.neteaseLyric(song.id),
-      song.coverUrl ? Promise.resolve(null) : api.neteaseDetail(String(song.id))
+      api.neteaseUrl(neteaseSong.sourceId || neteaseSong.id),
+      api.neteaseLyric(neteaseSong.sourceId || neteaseSong.id),
+      neteaseSong.coverUrl ? Promise.resolve(null) : api.neteaseDetail(String(neteaseSong.sourceId || neteaseSong.id))
     ])
     // 设置播放URL
     const urlData = urlRes.data?.data
     if (urlData && urlData.length > 0 && urlData[0].url) {
-      song.filePath = urlData[0].url
+      neteaseSong.filePath = urlData[0].url
     }
     // 设置歌词
     const lyricData = lyricRes.data?.data
     if (lyricData?.lrc?.lyric) {
-      song.lyric = lyricData.lrc.lyric
+      neteaseSong.lyric = lyricData.lrc.lyric
       // 异步持久化歌词到后端（供情绪分析使用）
-      api.saveLyric(song.id, song.lyric).catch(() => {})
+      api.saveLyric(neteaseSong.id, neteaseSong.lyric).catch(() => {})
     }
     // 补充封面（搜索时可能未获取到）
-    if (detailRes && !song.coverUrl) {
+    if (detailRes && !neteaseSong.coverUrl) {
       const detailSongs = detailRes.data?.data || []
       if (detailSongs.length > 0) {
         const picUrl = (detailSongs[0].al || {}).picUrl || ''
-        song.coverUrl = picUrl.startsWith('http://') ? picUrl.replace('http://', 'https://') : picUrl
+        neteaseSong.coverUrl = picUrl.startsWith('http://') ? picUrl.replace('http://', 'https://') : picUrl
       }
     }
-    currentSong.value = { ...song }
+    currentSong.value = { ...neteaseSong }
+    playQueue.value = playQueue.value.map(item =>
+      queueSongKey(item) === queueSongKey(neteaseSong) ? { ...neteaseSong } : item
+    )
+    scheduleSaveQueueState()
   } catch (e) { console.error('获取播放数据失败', e) }
 }
 
@@ -469,11 +489,13 @@ function normalizeDuration(duration) {
 onMounted(async () => {
   try { await api.hello(); connected.value = true } catch (e) { /* ignore */ }
   await loadSongs()
+  await restoreQueueState()
   window.addEventListener('dj-play-song', playExternalSong)
   window.addEventListener('dj-user-session-changed', handleUserSessionChanged)
 })
 
 onBeforeUnmount(() => {
+  if (queueSyncTimer) window.clearTimeout(queueSyncTimer)
   window.removeEventListener('dj-play-song', playExternalSong)
   window.removeEventListener('dj-user-session-changed', handleUserSessionChanged)
 })
@@ -481,8 +503,96 @@ onBeforeUnmount(() => {
 async function handleUserSessionChanged() {
   favoriteSongs.value = []
   historySongs.value = []
+  currentSong.value = null
+  playQueue.value = []
+  queueExpanded.value = false
+  await restoreQueueState()
   if (activeTab.value === 'favorites') await loadFavorites()
   if (activeTab.value === 'history') await loadHistory()
+}
+
+watch(playMode, () => {
+  if (restoringQueue.value) return
+  scheduleSaveQueueState()
+})
+
+async function restoreQueueState() {
+  restoringQueue.value = true
+  queueDirtyDuringRestore = false
+  try {
+    const res = await api.queueState()
+    if (queueDirtyDuringRestore) {
+      return
+    }
+    const state = res.data?.data || {}
+    playMode.value = state.playMode || 'order'
+    playQueue.value = Array.isArray(state.queue) ? state.queue.map(normalizeRestoredSong) : []
+    currentSong.value = state.currentSong ? normalizeRestoredSong(state.currentSong) : (playQueue.value[0] || null)
+  } catch (e) {
+    console.error('恢复播放队列失败', e)
+  } finally {
+    restoringQueue.value = false
+    if (queueDirtyDuringRestore) {
+      queueDirtyDuringRestore = false
+      scheduleSaveQueueState()
+    }
+  }
+}
+
+function scheduleSaveQueueState(markDirty = true) {
+  if (restoringQueue.value) {
+    if (markDirty) queueDirtyDuringRestore = true
+    return
+  }
+  if (queueSyncTimer) window.clearTimeout(queueSyncTimer)
+  queueSyncTimer = window.setTimeout(saveQueueState, 250)
+}
+
+async function saveQueueState() {
+  if (restoringQueue.value) return
+  try {
+    await api.saveQueueState({
+      playMode: playMode.value,
+      currentSong: currentSong.value ? normalizeQueueSong(currentSong.value) : null,
+      queue: playQueue.value.map(normalizeQueueSong)
+    })
+  } catch (e) {
+    console.error('保存播放队列失败', e)
+  }
+}
+
+function normalizeRestoredSong(song) {
+  const restored = normalizeQueueSong(song)
+  if (restored.source === 'NETEASE') {
+    restored._netease = true
+  }
+  return restored
+}
+
+function normalizeQueueSong(song) {
+  if (!song) return null
+  const netease = song._netease || song.source === 'NETEASE'
+  const sourceId = song.sourceId || (netease ? song.id : '')
+  return {
+    ...song,
+    id: song.id || song.songId || sourceId,
+    source: netease ? 'NETEASE' : (song.source || 'PROJECT'),
+    sourceId: sourceId ? String(sourceId) : '',
+    album: song.album || '',
+    genre: song.genre || (netease ? '网易云' : ''),
+    coverUrl: song.coverUrl || '',
+    filePath: song.filePath || '',
+    duration: normalizeDuration(song.duration),
+    _netease: netease
+  }
+}
+
+function queueSongKey(song) {
+  if (!song) return ''
+  const netease = song._netease || song.source === 'NETEASE'
+  if (song.sourceId) return `${netease ? 'NETEASE' : (song.source || 'PROJECT')}:${song.sourceId}`
+  if (song.id) return `ID:${song.id}`
+  return `${song.title || ''}|${song.artist || ''}`
 }
 </script>
 

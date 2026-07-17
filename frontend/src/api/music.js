@@ -58,6 +58,13 @@ export default {
   recordPlay: (songId, userId) =>
     musicApi.post('/history', { songId, userId: resolveUserId(userId) }),
 
+  // ── 播放队列 ──
+  queueState: (userId) => musicApi.get('/queue/state', { params: { userId: resolveUserId(userId) } }),
+  saveQueueState: (state, userId) =>
+    musicApi.put('/queue/state', { ...state, userId: resolveUserId(userId) }),
+  clearQueueState: (userId) =>
+    musicApi.delete('/queue/state', { params: { userId: resolveUserId(userId) } }),
+
   // ── 网易云音乐 ──
   neteaseSearch: (keywords, limit = 20) =>
     musicApi.get('/netease/search', { params: { keywords, limit } }),
