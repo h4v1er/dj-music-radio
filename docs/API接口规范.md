@@ -82,6 +82,16 @@
 
 `context.location` 为可选上下文。没有该上下文但 AI 规划需要当前位置时，WebSocket 会返回 `tool_request(location.current)`，由前端执行浏览器定位后带着工具结果再次发送原消息。
 
+### 对话可用工具
+
+| 工具 | 执行端 | 说明 |
+|:---|:---|:---|
+| `location.current` | 前端 | 浏览器定位，需用户授权 |
+| `time.current` | 后端 | 当前日期、时间、星期、时区 |
+| `weather.now` | 后端 | 和风天气实时天气，包含温度、体感、湿度、风、降水、气压、能见度等 |
+| `music.catalog` / `music.search` / `music.neteaseSearch` | 后端 | 歌曲候选、关键词搜索、网易云搜索 |
+| `rec.daily` / `rec.hot` / `rec.preferences` | 后端 | 推荐模块数据 |
+
 ### 天气响应格式
 
 `GET /chat/weather?city=北京`
@@ -95,7 +105,19 @@
   "greeting": "下午好，想听点什么？",
   "source": "real",
   "obsTime": "2026-07-17T14:00+08:00",
-  "message": "和风天气实时数据"
+  "message": "和风天气实时数据",
+  "feelsLike": "27°",
+  "windDir": "东风",
+  "windScale": "3",
+  "windSpeed": "13",
+  "humidity": "94",
+  "precip": "0.0",
+  "pressure": "996",
+  "vis": "7",
+  "cloud": "100",
+  "dew": "23",
+  "updateTime": "2026-07-17T14:03+08:00",
+  "fxLink": "https://www.qweather.com/..."
 }
 ```
 

@@ -2,6 +2,8 @@ package org.example.chat.service;
 
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -44,6 +46,7 @@ public class ChatService {
     );
     private static final Map<Long, Deque<ChatMessage>> HISTORIES = new ConcurrentHashMap<>();
     private static final String TOOL_LOCATION_CURRENT = "location.current";
+    private static final String TOOL_TIME_CURRENT = "time.current";
 
     private final ChatHistoryMapper chatHistoryMapper;
     private final MusicRecommendationClient musicRecommendationClient;
@@ -207,14 +210,11 @@ public class ChatService {
                                 call.name(),
                                 call.purpose(),
                                 "ok",
-                                "天气：" + weather.city() + " " + weather.text() + " " + weather.temp()
-                                        + "，source=" + weather.source()
-                                        + (weather.message() == null || weather.message().isBlank()
-                                                ? ""
-                                                : "，message=" + weather.message()),
+                                weatherSummary(weather),
                                 0
                         ));
                     }
+                    case TOOL_TIME_CURRENT -> toolResults.add(timeResult(call));
                     default -> toolResults.add(new ToolResult(
                             call.name(),
                             call.purpose(),
@@ -271,6 +271,44 @@ public class ChatService {
 
     private static boolean needsClientLocation(DeepSeekChatClient.ToolPlan plan) {
         return plan != null && plan.tools().stream().anyMatch(call -> TOOL_LOCATION_CURRENT.equals(call.name()));
+    }
+
+    private static ToolResult timeResult(DeepSeekChatClient.ToolCallPlan call) {
+        ZonedDateTime now = ZonedDateTime.now(ZoneId.of("Asia/Shanghai"));
+        String[] weekdays = {"周一", "周二", "周三", "周四", "周五", "周六", "周日"};
+        String weekday = weekdays[now.getDayOfWeek().getValue() - 1];
+        String summary = "时间：" + now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                + "，" + weekday
+                + "，时区=Asia/Shanghai";
+        return new ToolResult(call.name(), call.purpose(), "ok", summary, 0);
+    }
+
+    private static String weatherSummary(WeatherService.WeatherResponse weather) {
+        List<String> parts = new ArrayList<>();
+        parts.add("天气：" + weather.city() + " " + weather.text() + " " + weather.temp());
+        addIfText(parts, "体感", weather.feelsLike());
+        addIfText(parts, "湿度", suffix(weather.humidity(), "%"));
+        addIfText(parts, "风向", weather.windDir());
+        addIfText(parts, "风力", suffix(weather.windScale(), "级"));
+        addIfText(parts, "风速", suffix(weather.windSpeed(), "km/h"));
+        addIfText(parts, "降水", suffix(weather.precip(), "mm"));
+        addIfText(parts, "气压", suffix(weather.pressure(), "hPa"));
+        addIfText(parts, "能见度", suffix(weather.vis(), "km"));
+        addIfText(parts, "云量", suffix(weather.cloud(), "%"));
+        addIfText(parts, "观测", weather.obsTime());
+        parts.add("source=" + weather.source());
+        addIfText(parts, "message", weather.message());
+        return String.join("，", parts);
+    }
+
+    private static void addIfText(List<String> parts, String label, String value) {
+        if (value != null && !value.isBlank()) {
+            parts.add(label + "=" + value);
+        }
+    }
+
+    private static String suffix(String value, String suffix) {
+        return value == null || value.isBlank() ? "" : value + suffix;
     }
 
     private static ToolResult locationResult(LocationContext location) {

@@ -33,6 +33,7 @@ public class DeepSeekChatClient {
             "rec.hot",
             "rec.preferences",
             "location.current",
+            "time.current",
             "weather.now"
     );
 
@@ -48,6 +49,7 @@ public class DeepSeekChatClient {
             - rec.hot: current hot ranking from the recommendation service.
             - rec.preferences: user's preference tags; not songs, but useful context for personalized recommendation.
             - location.current: client-side browser geolocation. Use when the user asks where they are, says "我这里/当前位置/当地", or asks location-aware questions without naming a city.
+            - time.current: current date, time, weekday, and timezone. Use when the user asks current time/date/day, or when time-aware music context is useful.
             - weather.now: current weather by city. Use for weather questions or weather-aware music recommendations.
 
             Planning rules:
@@ -59,6 +61,7 @@ public class DeepSeekChatClient {
             - For semantic scene-based music, prefer music.catalog plus rec.preferences; add weather.now only if weather or city matters.
             - If the user asks about their current location or says "我这里/当地/当前位置" and no city is known from the message, call location.current first.
             - If the user asks weather or weather-aware music for "我这里/当地/当前位置", call location.current plus weather.now. Leave weather.now.location empty so the system can fill it from location.current.
+            - If the user asks "现在几点/今天几号/今天周几/现在是什么时候", call time.current.
             - For explicit artist/title, prefer music.search; add music.neteaseSearch when the request asks NetEase or the local DB may miss it.
             - For "daily", "random", "不知道听什么", prefer rec.daily plus rec.preferences; add rec.hot as a fallback.
             - For weather-only questions, use weather.now and no music tools.
@@ -460,8 +463,12 @@ public class DeepSeekChatClient {
             boolean music = looksLikeMusicRequest(normalized);
             boolean weather = looksLikeWeatherRequest(normalized);
             boolean location = looksLikeLocationRequest(normalized);
+            boolean time = looksLikeTimeRequest(normalized);
             if (location) {
                 calls.add(new ToolCallPlan("location.current", "获取浏览器当前位置", "", "", 1));
+            }
+            if (time) {
+                calls.add(new ToolCallPlan("time.current", "获取当前日期时间", "", "", 1));
             }
             if (weather) {
                 calls.add(new ToolCallPlan("weather.now", "回答天气或结合天气推荐", "", location ? "" : extractLocation(normalized), 1));
@@ -474,7 +481,7 @@ public class DeepSeekChatClient {
                     calls.add(new ToolCallPlan("music.neteaseSearch", "按用户要求搜索网易云", normalized, "", 20));
                 }
             }
-            String mode = location && !weather && !music ? "general" : weather && !music ? "weather" : music ? "music" : "general";
+            String mode = location && !weather && !music || time && !weather && !music ? "general" : weather && !music ? "weather" : music ? "music" : "general";
             boolean ambiguous = looksLikeBareFragment(normalized);
             return new ToolPlan(
                     ambiguous ? "general" : mode,
@@ -510,6 +517,8 @@ public class DeepSeekChatClient {
                     safeTools = List.of(new ToolCallPlan("weather.now", "获取天气", "", extractLocation(userInput), 1));
                 } else if (looksLikeLocationRequest(userInput)) {
                     safeTools = List.of(new ToolCallPlan("location.current", "获取浏览器当前位置", "", "", 1));
+                } else if (looksLikeTimeRequest(userInput)) {
+                    safeTools = List.of(new ToolCallPlan("time.current", "获取当前日期时间", "", "", 1));
                 } else if ("music".equals(chatMode) || looksLikeMusicRequest(userInput)) {
                     safeTools = List.of(new ToolCallPlan("music.catalog", "获取本地歌曲候选池", userInput, "", 50));
                 }
@@ -553,6 +562,16 @@ public class DeepSeekChatClient {
                     || value.contains("当前城市")
                     || value.contains("当地")
                     || value.contains("本地");
+        }
+
+        private static boolean looksLikeTimeRequest(String value) {
+            return value.contains("现在几点")
+                    || value.contains("几点了")
+                    || value.contains("今天几号")
+                    || value.contains("今天周几")
+                    || value.contains("星期几")
+                    || value.contains("日期")
+                    || value.contains("时间");
         }
 
         private static boolean looksLikeBareFragment(String value) {

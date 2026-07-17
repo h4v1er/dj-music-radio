@@ -104,7 +104,19 @@ public class WeatherService {
                     greeting(),
                     "real",
                     now.obsTime(),
-                    "和风天气实时数据"
+                    "和风天气实时数据",
+                    degree(now.feelsLike()),
+                    now.windDir(),
+                    now.windScale(),
+                    now.windSpeed(),
+                    now.humidity(),
+                    now.precip(),
+                    now.pressure(),
+                    now.vis(),
+                    now.cloud(),
+                    now.dew(),
+                    nowResponse.updateTime(),
+                    nowResponse.fxLink()
             );
         } catch (Exception e) {
             log.warn("QWeather request failed for city={}, fallback to demo weather", safeCity, e);
@@ -188,9 +200,34 @@ public class WeatherService {
         return ICONS.getOrDefault(code, "🌡️");
     }
 
+    private static String degree(String value) {
+        return StringUtils.hasText(value) ? value + "°" : "";
+    }
+
     private static WeatherResponse demoWeather(String city, String message) {
         WeatherSnapshot snapshot = demoSnapshot(city);
-        return new WeatherResponse(city, snapshot.icon(), snapshot.temp(), snapshot.text(), greeting(), "demo", "", message);
+        return new WeatherResponse(
+                city,
+                snapshot.icon(),
+                snapshot.temp(),
+                snapshot.text(),
+                greeting(),
+                "demo",
+                "",
+                message,
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                ""
+        );
     }
 
     private static WeatherSnapshot demoSnapshot(String city) {
@@ -235,7 +272,19 @@ public class WeatherService {
             String greeting,
             String source,
             String obsTime,
-            String message) {
+            String message,
+            String feelsLike,
+            String windDir,
+            String windScale,
+            String windSpeed,
+            String humidity,
+            String precip,
+            String pressure,
+            String vis,
+            String cloud,
+            String dew,
+            String updateTime,
+            String fxLink) {
     }
 
     private record WeatherSnapshot(String icon, String temp, String text) {
@@ -247,9 +296,23 @@ public class WeatherService {
     private record GeoLocation(String name, String id, String adm1) {
     }
 
-    private record WeatherNowResponse(String code, WeatherNow now) {
+    private record WeatherNowResponse(String code, String updateTime, String fxLink, WeatherNow now) {
     }
 
-    private record WeatherNow(String obsTime, String temp, String icon, String text) {
+    private record WeatherNow(
+            String obsTime,
+            String temp,
+            String feelsLike,
+            String icon,
+            String text,
+            String windDir,
+            String windScale,
+            String windSpeed,
+            String humidity,
+            String precip,
+            String pressure,
+            String vis,
+            String cloud,
+            String dew) {
     }
 }

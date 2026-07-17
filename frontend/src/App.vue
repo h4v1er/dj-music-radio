@@ -2,6 +2,7 @@
 import ChatPanel from './components/ChatPanel.vue'
 import MusicPanel from './components/MusicPanel.vue'
 import RecPanel from './components/RecPanel.vue'
+import TimeWidget from './components/TimeWidget.vue'
 import UserBar from './components/UserBar.vue'
 import WeatherWidget from './components/WeatherWidget.vue'
 </script>
@@ -13,7 +14,10 @@ import WeatherWidget from './components/WeatherWidget.vue'
     <!-- 顶部栏 -->
     <header class="topbar">
       <div class="logo">🎧 DJ 音乐电台</div>
-      <WeatherWidget />    <!-- 队员A: 天气 -->
+      <div class="topbar-tools">
+        <TimeWidget />
+        <WeatherWidget />    <!-- 队员A: 天气 -->
+      </div>
     </header>
 
     <!-- 主区域：三栏面板 + 可拖拽调整 -->
@@ -55,6 +59,13 @@ import WeatherWidget from './components/WeatherWidget.vue'
   background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+.topbar-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
 }
 
 /* ---- 主区域 ---- */

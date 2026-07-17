@@ -4,7 +4,7 @@
  * 功能: 实时天气 + 时段感知DJ欢迎语
  * 后端: module-chat (:8081) 调用和风天气API
  */
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { Loading, Refresh, WarningFilled } from '@element-plus/icons-vue'
 import { chatApi } from '../api/chat'
 
@@ -20,7 +20,19 @@ const weather = ref({
   text: '晴',
   source: 'demo',
   obsTime: '',
-  message: '未配置真实天气服务'
+  message: '未配置真实天气服务',
+  feelsLike: '',
+  windDir: '',
+  windScale: '',
+  windSpeed: '',
+  humidity: '',
+  precip: '',
+  pressure: '',
+  vis: '',
+  cloud: '',
+  dew: '',
+  updateTime: '',
+  fxLink: ''
 })
 const greeting = ref('下午好，想听点什么？')
 const loading = ref(false)
@@ -44,7 +56,19 @@ async function loadWeather() {
       text: res.data.text || '未知',
       source: res.data.source || 'demo',
       obsTime: res.data.obsTime || '',
-      message: sourceMessage(location.source, res.data.message)
+      message: sourceMessage(location.source, res.data.message),
+      feelsLike: res.data.feelsLike || '',
+      windDir: res.data.windDir || '',
+      windScale: res.data.windScale || '',
+      windSpeed: res.data.windSpeed || '',
+      humidity: res.data.humidity || '',
+      precip: res.data.precip || '',
+      pressure: res.data.pressure || '',
+      vis: res.data.vis || '',
+      cloud: res.data.cloud || '',
+      dew: res.data.dew || '',
+      updateTime: res.data.updateTime || '',
+      fxLink: res.data.fxLink || ''
     }
     rememberWeatherLocation(weather.value.city, location)
     locationSource.value = location.source
@@ -111,6 +135,34 @@ function rememberWeatherLocation(city, location) {
     localStorage.removeItem(WEATHER_LOCATION_STORAGE_KEY)
   }
 }
+
+const detailRows = computed(() => [
+  ['城市', weather.value.city],
+  ['天气', weather.value.text],
+  ['温度', weather.value.temp],
+  ['体感', weather.value.feelsLike],
+  ['湿度', withUnit(weather.value.humidity, '%')],
+  ['风向', weather.value.windDir],
+  ['风力', withUnit(weather.value.windScale, '级')],
+  ['风速', withUnit(weather.value.windSpeed, 'km/h')],
+  ['降水', withUnit(weather.value.precip, 'mm')],
+  ['气压', withUnit(weather.value.pressure, 'hPa')],
+  ['能见度', withUnit(weather.value.vis, 'km')],
+  ['云量', withUnit(weather.value.cloud, '%')],
+  ['露点', weather.value.dew ? `${weather.value.dew}°` : ''],
+  ['观测时间', formatTime(weather.value.obsTime)],
+  ['更新时间', formatTime(weather.value.updateTime)],
+  ['数据来源', weather.value.source === 'real' ? '和风天气实时数据' : '演示数据']
+].filter(([, value]) => value))
+
+function withUnit(value, unit) {
+  return value ? `${value}${unit}` : ''
+}
+
+function formatTime(value) {
+  if (!value) return ''
+  return value.replace('T', ' ')
+}
 </script>
 
 <template>
@@ -124,13 +176,23 @@ function rememberWeatherLocation(city, location) {
       <el-icon><WarningFilled /></el-icon>
       天气不可用
     </span>
-    <span v-else class="info" :title="weather.message">
-      {{ weather.icon }} {{ weather.temp }} {{ weather.city }} {{ weather.text }}
-      <em :class="{ real: weather.source === 'real' }">
-        {{ weather.source === 'real' ? '实时' : '演示数据' }}
-      </em>
-      <em v-if="locationSource === 'geolocation'" class="location">定位</em>
-    </span>
+    <div v-else class="weather-detail">
+      <span class="info">
+        {{ weather.icon }} {{ weather.temp }} {{ weather.city }} {{ weather.text }}
+        <em :class="{ real: weather.source === 'real' }">
+          {{ weather.source === 'real' ? '实时' : '演示数据' }}
+        </em>
+        <em v-if="locationSource === 'geolocation'" class="location">定位</em>
+      </span>
+      <div class="weather-popover">
+        <div class="popover-title">{{ weather.city }} 天气详情</div>
+        <div v-for="[label, value] in detailRows" :key="label" class="detail-row">
+          <span>{{ label }}</span>
+          <strong>{{ value }}</strong>
+        </div>
+        <div class="message">{{ weather.message }}</div>
+      </div>
+    </div>
     <button class="refresh-btn" :disabled="loading" title="刷新天气" @click="loadWeather">
       <el-icon><Refresh /></el-icon>
     </button>
@@ -158,6 +220,64 @@ function rememberWeatherLocation(city, location) {
   color: var(--color-accent);
   font-weight: 500;
   white-space: nowrap;
+}
+
+.weather-detail {
+  position: relative;
+  display: inline-flex;
+}
+
+.weather-popover {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  z-index: 20;
+  width: 310px;
+  max-height: min(520px, calc(100vh - 80px));
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: rgba(18, 18, 32, 0.96);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 0.16s, transform 0.16s;
+}
+
+.weather-detail:hover .weather-popover {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.popover-title {
+  margin-bottom: 8px;
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 5px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--color-text-muted);
+}
+
+.detail-row strong {
+  color: var(--color-text);
+  font-weight: 600;
+  text-align: right;
+}
+
+.message {
+  margin-top: 8px;
+  color: var(--color-text-dim);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .info.muted {
