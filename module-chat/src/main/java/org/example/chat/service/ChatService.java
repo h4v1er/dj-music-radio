@@ -174,7 +174,10 @@ public class ChatService {
                                 call.purpose(),
                                 "ok",
                                 "天气：" + weather.city() + " " + weather.text() + " " + weather.temp()
-                                        + "，source=" + weather.source(),
+                                        + "，source=" + weather.source()
+                                        + (weather.message() == null || weather.message().isBlank()
+                                                ? ""
+                                                : "，message=" + weather.message()),
                                 0
                         ));
                     }

@@ -20,6 +20,7 @@
 | [架构设计.md](./架构设计.md) | 微服务架构图、技术选型、数据库表设计 → 答辩 PPT 引用 |
 | [API接口规范.md](./API接口规范.md) | 4 个模块的接口约定 → 前后端联调依据 |
 | [前端设计规范.md](./前端设计规范.md) | 颜色变量、面板样式、布局规则 → 保证界面风格统一 |
+| [module-chat-runtime.md](./module-chat-runtime.md) | 智能对话 DJ 运行依赖：DeepSeek、和风天气、验证命令 |
 | [module-music-runtime.md](./module-music-runtime.md) | 音乐中心额外依赖：网易云 API、DeepSeek、数据库初始化 |
 
 ---

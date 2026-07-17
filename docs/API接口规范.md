@@ -16,10 +16,10 @@
 | 方法 | 路径 | 说明 | 状态 |
 |:-----|:-----|:-----|:----:|
 | `GET` | `/chat/hello` | 服务健康检查 | ✅ |
-| `WS` | `/chat/ws` | WebSocket 实时对话 | 📌 TODO |
-| `POST` | `/chat/send` | 发送对话消息 | 📌 TODO |
-| `GET` | `/chat/history?userId=` | 获取对话历史 | 📌 TODO |
-| `GET` | `/chat/weather?city=` | 查询天气 | 📌 TODO |
+| `WS` | `/chat/ws` | WebSocket 实时对话 | ✅ |
+| `POST` | `/chat/send` | 发送对话消息 | ✅ |
+| `GET` | `/chat/history?userId=` | 获取对话历史 | ✅ |
+| `GET` | `/chat/weather?city=` | 查询天气 | ✅ |
 
 ### WebSocket 消息格式
 
@@ -28,8 +28,32 @@
 { "type": "message", "content": "推荐一些摇滚歌曲" }
 
 // 服务端 → 客户端
-{ "type": "reply", "content": "好的，为你推荐以下歌曲...", "songs": [...] }
+{
+  "type": "reply",
+  "content": "好的，为你推荐以下歌曲...",
+  "songs": [...],
+  "selectedSongs": [...]
+}
 ```
+
+### 天气响应格式
+
+`GET /chat/weather?city=北京`
+
+```json
+{
+  "city": "北京",
+  "icon": "☀️",
+  "temp": "28°",
+  "text": "晴",
+  "greeting": "下午好，想听点什么？",
+  "source": "real",
+  "obsTime": "2026-07-17T14:00+08:00",
+  "message": "和风天气实时数据"
+}
+```
+
+`source=real` 表示已调用和风天气真实接口；`source=demo` 表示未配置 key、host 错误、接口异常等情况下的显式演示降级，具体原因看 `message`。
 
 ---
 

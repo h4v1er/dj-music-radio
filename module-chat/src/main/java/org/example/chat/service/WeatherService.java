@@ -5,6 +5,8 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -13,6 +15,8 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 @Service
 public class WeatherService {
+
+    private static final Logger log = LoggerFactory.getLogger(WeatherService.class);
 
     private static final Map<String, String> ICONS = Map.ofEntries(
             Map.entry("100", "☀️"),
@@ -42,18 +46,19 @@ public class WeatherService {
     public WeatherService(
             RestClient.Builder restClientBuilder,
             @Value("${weather.api-key:}") String apiKey,
+            @Value("${weather.api-host:}") String apiHost,
             @Value("${weather.weather-url}") String weatherUrl,
             @Value("${weather.geo-url}") String geoUrl) {
         this.restClient = restClientBuilder.build();
         this.apiKey = apiKey;
-        this.weatherUrl = weatherUrl;
-        this.geoUrl = geoUrl;
+        this.weatherUrl = resolveUrl(apiHost, weatherUrl, "/v7/weather/now");
+        this.geoUrl = resolveUrl(apiHost, geoUrl, "/geo/v2/city/lookup");
     }
 
     public WeatherResponse weather(String city) {
         String safeCity = normalizeCity(city);
         if (!hasApiKey()) {
-            return demoWeather(safeCity);
+            return demoWeather(safeCity, "未配置 QWEATHER_API_KEY，当前使用演示天气");
         }
 
         try {
@@ -62,8 +67,14 @@ public class WeatherService {
                     .header("X-QW-Api-Key", apiKey)
                     .retrieve()
                     .body(GeoResponse.class);
-            if (geo == null || geo.location() == null || geo.location().isEmpty()) {
-                return demoWeather(safeCity);
+            if (geo == null) {
+                return demoWeather(safeCity, "城市查询接口无响应，当前使用演示天气");
+            }
+            if (!"200".equals(geo.code())) {
+                return demoWeather(safeCity, "城市查询失败，和风天气 code=" + geo.code());
+            }
+            if (geo.location() == null || geo.location().isEmpty()) {
+                return demoWeather(safeCity, "未找到城市「" + safeCity + "」，当前使用演示天气");
             }
 
             GeoLocation location = geo.location().get(0);
@@ -73,8 +84,14 @@ public class WeatherService {
                     .retrieve()
                     .body(WeatherNowResponse.class);
 
-            if (nowResponse == null || nowResponse.now() == null) {
-                return demoWeather(safeCity);
+            if (nowResponse == null) {
+                return demoWeather(safeCity, "实时天气接口无响应，当前使用演示天气");
+            }
+            if (!"200".equals(nowResponse.code())) {
+                return demoWeather(safeCity, "实时天气查询失败，和风天气 code=" + nowResponse.code());
+            }
+            if (nowResponse.now() == null) {
+                return demoWeather(safeCity, "实时天气结果为空，当前使用演示天气");
             }
 
             WeatherNow now = nowResponse.now();
@@ -85,15 +102,36 @@ public class WeatherService {
                     now.text(),
                     greeting(),
                     "real",
-                    now.obsTime()
+                    now.obsTime(),
+                    "和风天气实时数据"
             );
         } catch (Exception e) {
-            return demoWeather(safeCity);
+            log.warn("QWeather request failed for city={}, fallback to demo weather", safeCity, e);
+            return demoWeather(safeCity, "天气接口调用异常，当前使用演示天气");
         }
     }
 
     private boolean hasApiKey() {
         return StringUtils.hasText(apiKey) && !"your_api_key_here".equals(apiKey);
+    }
+
+    private static String resolveUrl(String apiHost, String fallbackUrl, String path) {
+        if (!StringUtils.hasText(apiHost)) {
+            return fallbackUrl;
+        }
+        String host = trimTrailingSlash(apiHost.trim());
+        if (!host.startsWith("http://") && !host.startsWith("https://")) {
+            host = "https://" + host;
+        }
+        return host + path;
+    }
+
+    private static String trimTrailingSlash(String value) {
+        String result = value;
+        while (result.endsWith("/")) {
+            result = result.substring(0, result.length() - 1);
+        }
+        return result;
     }
 
     private URI geoUri(String city) {
@@ -125,9 +163,9 @@ public class WeatherService {
         return ICONS.getOrDefault(code, "🌡️");
     }
 
-    private static WeatherResponse demoWeather(String city) {
+    private static WeatherResponse demoWeather(String city, String message) {
         WeatherSnapshot snapshot = demoSnapshot(city);
-        return new WeatherResponse(city, snapshot.icon(), snapshot.temp(), snapshot.text(), greeting(), "demo", "");
+        return new WeatherResponse(city, snapshot.icon(), snapshot.temp(), snapshot.text(), greeting(), "demo", "", message);
     }
 
     private static WeatherSnapshot demoSnapshot(String city) {
@@ -171,7 +209,8 @@ public class WeatherService {
             String text,
             String greeting,
             String source,
-            String obsTime) {
+            String obsTime,
+            String message) {
     }
 
     private record WeatherSnapshot(String icon, String temp, String text) {

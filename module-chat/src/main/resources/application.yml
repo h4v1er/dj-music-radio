@@ -29,8 +29,11 @@ mybatis-plus:
 # 天气 API（和风天气免费接口）
 weather:
   api-key: ${QWEATHER_API_KEY:}
-  weather-url: https://devapi.qweather.com/v7/weather/now
-  geo-url: https://geoapi.qweather.com/geo/v2/city/lookup
+  # 和风天气控制台项目的 API Host。配置后会优先使用 https://${QWEATHER_API_HOST}/...
+  api-host: ${QWEATHER_API_HOST:}
+  # 兼容旧版/自定义地址；配置 api-host 时会被自动覆盖为同一 host 下的路径。
+  weather-url: ${QWEATHER_WEATHER_URL:https://devapi.qweather.com/v7/weather/now}
+  geo-url: ${QWEATHER_GEO_URL:https://geoapi.qweather.com/geo/v2/city/lookup}
 
 # DeepSeek AI DJ chat. Keep keys in local environment, not in Git.
 deepseek:

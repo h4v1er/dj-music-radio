@@ -54,3 +54,9 @@
 - [x] 验证通过：`module-chat -am package -DskipTests`；Gateway `/chat/send` 音乐意图请求返回 3 首歌，普通问候返回 `songs=[]`
 - [x] 修复 AI 对话边界：DeepSeek 意图解析传入最近对话历史，支持“还有啥”“讲吧”等短追问；普通聊天/讲故事不再强制回到歌单推荐
 - [x] 验证通过：`/chat/send` 连续对话中，音乐追问保留 `songs=3`，讲故事和继续讲故事返回 `songs=0`
+
+## 2026-07-17 补充记录
+- [x] 明确天气模块真实/演示数据边界：`GET /chat/weather` 新增 `message` 字段，返回和风天气实时数据或演示降级原因
+- [x] `WeatherService` 支持 `QWEATHER_API_HOST`，兼容和风天气新版专属 API Host；保留 `QWEATHER_WEATHER_URL` / `QWEATHER_GEO_URL` 手动覆盖能力
+- [x] `WeatherWidget.vue` 显示“实时 / 演示数据”来源标识，鼠标悬停可查看后端返回的来源说明
+- [x] 新增 [module-chat-runtime.md](../module-chat-runtime.md)，记录 DeepSeek、和风天气环境变量、远端计划任务重启和天气接口验证方式

@@ -10,7 +10,15 @@ import { chatApi } from '../api/chat'
 
 const DEFAULT_CITY = '北京'
 
-const weather = ref({ icon: '☀️', temp: '28°', city: DEFAULT_CITY, text: '晴', source: 'demo' })
+const weather = ref({
+  icon: '☀️',
+  temp: '28°',
+  city: DEFAULT_CITY,
+  text: '晴',
+  source: 'demo',
+  obsTime: '',
+  message: '未配置真实天气服务'
+})
 const greeting = ref('下午好，想听点什么？')
 const loading = ref(false)
 const failed = ref(false)
@@ -29,7 +37,9 @@ async function loadWeather() {
       temp: res.data.temp || '--°',
       city: res.data.city || DEFAULT_CITY,
       text: res.data.text || '未知',
-      source: res.data.source || 'demo'
+      source: res.data.source || 'demo',
+      obsTime: res.data.obsTime || '',
+      message: res.data.message || ''
     }
     greeting.value = res.data.greeting || '想听点什么？'
   } catch (e) {
@@ -52,9 +62,11 @@ async function loadWeather() {
       <el-icon><WarningFilled /></el-icon>
       天气不可用
     </span>
-    <span v-else class="info">
+    <span v-else class="info" :title="weather.message">
       {{ weather.icon }} {{ weather.temp }} {{ weather.city }} {{ weather.text }}
-      <em v-if="weather.source === 'demo'">演示</em>
+      <em :class="{ real: weather.source === 'real' }">
+        {{ weather.source === 'real' ? '实时' : '演示数据' }}
+      </em>
     </span>
     <button class="refresh-btn" :disabled="loading" title="刷新天气" @click="loadWeather">
       <el-icon><Refresh /></el-icon>
@@ -97,6 +109,10 @@ async function loadWeather() {
   font-style: normal;
   font-size: 11px;
   color: var(--color-text-dim);
+}
+
+.info em.real {
+  color: var(--color-accent);
 }
 
 .refresh-btn {
