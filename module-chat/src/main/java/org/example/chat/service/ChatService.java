@@ -12,6 +12,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.example.chat.client.MusicRecommendationClient;
@@ -28,6 +30,18 @@ public class ChatService {
     private static final int MAX_CANDIDATE_SONGS = 80;
     private static final long DB_RETRY_INTERVAL_MS = 30_000L;
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
+    private static final String DEFAULT_WEATHER_LOCATION = "北京";
+    private static final Pattern WEATHER_LOCATION_PATTERN = Pattern.compile(
+            "([\\u4e00-\\u9fa5]{2,8}(?:市|县|区|州|盟|旗|省)?)"
+                    + "(?:现在|今天|明天|后天|未来|这几天|最近)?"
+                    + "(?:天气|气温|温度|下雨|晴|阴|小雨|大雨|多云)"
+    );
+    private static final List<String> WEATHER_LOCATIONS = List.of(
+            "北京", "上海", "广州", "深圳", "成都", "杭州", "南京", "武汉", "重庆", "西安",
+            "威海", "青岛", "济南", "烟台", "天津", "苏州", "宁波", "厦门", "福州", "长沙",
+            "郑州", "合肥", "南昌", "昆明", "贵阳", "南宁", "海口", "三亚", "兰州", "银川",
+            "西宁", "乌鲁木齐", "呼和浩特", "哈尔滨", "长春", "沈阳", "大连", "石家庄", "太原"
+    );
     private static final Map<Long, Deque<ChatMessage>> HISTORIES = new ConcurrentHashMap<>();
 
     private final ChatHistoryMapper chatHistoryMapper;
@@ -51,13 +65,15 @@ public class ChatService {
     }
 
     public ChatSendResponse send(ChatSendRequest request) {
-        ChatSendRequest safeRequest = request == null ? new ChatSendRequest(DEFAULT_USER_ID, "") : request;
+        ChatSendRequest safeRequest = request == null ? new ChatSendRequest(DEFAULT_USER_ID, "", "") : request;
         long userId = safeRequest.userId() == null ? DEFAULT_USER_ID : safeRequest.userId();
         String content = normalize(safeRequest.content());
         List<ChatMessage> recentHistory = history(userId);
         ChatMessage userMessage = new ChatMessage("user", content, now());
 
+        String weatherLocation = resolveWeatherLocation(content, safeRequest.city(), recentHistory);
         DeepSeekChatClient.ToolPlan plan = deepSeekChatClient.planToolUse(content, recentHistory);
+        plan = enrichWeatherPlan(content, weatherLocation, plan);
         if (plan.needClarification()) {
             String question = plan.clarificationQuestion().isBlank()
                     ? "你想让我具体帮你做什么？"
@@ -67,7 +83,7 @@ public class ChatService {
             appendHistory(userId, reply);
             return new ChatSendResponse(reply, List.of(), List.of(), List.of());
         }
-        ToolExecution execution = executeTools(userId, content, plan);
+        ToolExecution execution = executeTools(userId, content, weatherLocation, plan);
         DeepSeekChatClient.AiReply aiReply = deepSeekChatClient.composeReply(
                 content,
                 plan,
@@ -118,7 +134,7 @@ public class ChatService {
         return new ArrayList<>(history);
     }
 
-    private ToolExecution executeTools(long userId, String content, DeepSeekChatClient.ToolPlan plan) {
+    private ToolExecution executeTools(long userId, String content, String weatherLocation, DeepSeekChatClient.ToolPlan plan) {
         if (plan == null || !plan.needTools()) {
             return new ToolExecution(List.of(), List.of());
         }
@@ -168,7 +184,7 @@ public class ChatService {
                         ));
                     }
                     case "weather.now" -> {
-                        WeatherService.WeatherResponse weather = weatherService.weather(location(content, call));
+                        WeatherService.WeatherResponse weather = weatherService.weather(location(content, weatherLocation, call));
                         toolResults.add(new ToolResult(
                                 call.name(),
                                 call.purpose(),
@@ -239,16 +255,162 @@ public class ChatService {
         return call.keyword() == null || call.keyword().isBlank() ? content : call.keyword();
     }
 
-    private static String location(String content, DeepSeekChatClient.ToolCallPlan call) {
+    private static String location(String content, String contextLocation, DeepSeekChatClient.ToolCallPlan call) {
         if (call.location() != null && !call.location().isBlank()) {
             return call.location();
         }
-        for (String city : List.of("北京", "上海", "广州", "深圳", "成都", "杭州", "南京", "武汉", "重庆", "西安")) {
+        String explicitLocation = extractWeatherLocation(content);
+        if (!explicitLocation.isBlank()) {
+            return explicitLocation;
+        }
+        if (contextLocation != null && !contextLocation.isBlank()) {
+            return contextLocation;
+        }
+        return DEFAULT_WEATHER_LOCATION;
+    }
+
+    private static DeepSeekChatClient.ToolPlan enrichWeatherPlan(
+            String content,
+            String weatherLocation,
+            DeepSeekChatClient.ToolPlan plan) {
+        if (!looksLikeWeatherRequest(content)) {
+            return plan;
+        }
+        if (weatherLocation == null || weatherLocation.isBlank()) {
+            return plan;
+        }
+
+        String explicitLocation = extractWeatherLocation(content);
+        List<DeepSeekChatClient.ToolCallPlan> originalTools = plan == null || plan.tools() == null
+                ? List.of()
+                : plan.tools();
+        List<DeepSeekChatClient.ToolCallPlan> tools = new ArrayList<>();
+        boolean hasWeatherTool = originalTools.stream().anyMatch(tool -> "weather.now".equals(tool.name()));
+        if (hasWeatherTool && plan != null) {
+            for (DeepSeekChatClient.ToolCallPlan tool : originalTools) {
+                boolean shouldUseContextLocation = "weather.now".equals(tool.name())
+                        && (tool.location() == null
+                        || tool.location().isBlank()
+                        || (DEFAULT_WEATHER_LOCATION.equals(tool.location()) && explicitLocation.isBlank()));
+                if (shouldUseContextLocation) {
+                    tools.add(new DeepSeekChatClient.ToolCallPlan(
+                            tool.name(),
+                            tool.purpose(),
+                            tool.keyword(),
+                            weatherLocation,
+                            tool.limit()
+                    ));
+                } else {
+                    tools.add(tool);
+                }
+            }
+        } else {
+            tools.add(new DeepSeekChatClient.ToolCallPlan("weather.now", "按上下文城市获取当前天气", "", weatherLocation, 1));
+            for (DeepSeekChatClient.ToolCallPlan tool : originalTools) {
+                if (!"weather.now".equals(tool.name())) {
+                    tools.add(tool);
+                }
+            }
+            if (looksLikeMusicRequest(content)) {
+                tools.add(new DeepSeekChatClient.ToolCallPlan("music.catalog", "根据天气场景获取本地歌曲候选池", content, "", 50));
+                tools.add(new DeepSeekChatClient.ToolCallPlan("rec.preferences", "结合用户偏好调整天气推荐", "", "", 10));
+            }
+        }
+
+        if (plan != null && !plan.needClarification() && !tools.isEmpty()) {
+            return new DeepSeekChatClient.ToolPlan(
+                    plan.chatMode(),
+                    plan.answerGoal(),
+                    false,
+                    "",
+                    true,
+                    tools,
+                    plan.responseStyle()
+            );
+        }
+
+        return new DeepSeekChatClient.ToolPlan(
+                looksLikeMusicRequest(content) ? "music" : "weather",
+                "使用上下文城市回答天气相关问题",
+                false,
+                "",
+                true,
+                tools,
+                ""
+        );
+    }
+
+    private static String resolveWeatherLocation(String content, String requestCity, List<ChatMessage> recentHistory) {
+        String explicitLocation = extractWeatherLocation(content);
+        if (!explicitLocation.isBlank()) {
+            return explicitLocation;
+        }
+        if (requestCity != null && !requestCity.isBlank()) {
+            return requestCity.trim();
+        }
+        if (recentHistory != null) {
+            for (int i = recentHistory.size() - 1; i >= 0; i--) {
+                String location = extractWeatherLocation(recentHistory.get(i).text());
+                if (!location.isBlank()) {
+                    return location;
+                }
+            }
+        }
+        return "";
+    }
+
+    private static String extractWeatherLocation(String content) {
+        if (content == null || content.isBlank()) {
+            return "";
+        }
+        for (String city : WEATHER_LOCATIONS) {
             if (content.contains(city)) {
                 return city;
             }
         }
-        return "北京";
+        Matcher matcher = WEATHER_LOCATION_PATTERN.matcher(content);
+        if (matcher.find()) {
+            String candidate = matcher.group(1);
+            if (!looksLikeLocationReference(candidate)) {
+                return candidate;
+            }
+        }
+        return "";
+    }
+
+    private static boolean looksLikeLocationReference(String value) {
+        return value == null
+                || value.isBlank()
+                || value.contains("我")
+                || value.contains("这")
+                || value.contains("那")
+                || value.contains("哪")
+                || value.contains("当地")
+                || value.contains("本地")
+                || value.contains("当前")
+                || value.contains("今天")
+                || value.contains("现在")
+                || value.contains("根据");
+    }
+
+    private static boolean looksLikeWeatherRequest(String content) {
+        return content != null
+                && (content.contains("天气")
+                || content.contains("气温")
+                || content.contains("温度")
+                || content.contains("下雨")
+                || content.contains("晴")
+                || content.contains("阴")
+                || content.contains("多云"));
+    }
+
+    private static boolean looksLikeMusicRequest(String content) {
+        return content != null
+                && (content.contains("歌")
+                || content.contains("音乐")
+                || content.contains("听")
+                || content.contains("推荐")
+                || content.contains("播放"));
     }
 
     private static ToolResult okResult(DeepSeekChatClient.ToolCallPlan call, String summary, int songCount) {
@@ -568,7 +730,7 @@ public class ChatService {
         return LocalTime.now().format(TIME_FORMATTER);
     }
 
-    public record ChatSendRequest(Long userId, String content) {
+    public record ChatSendRequest(Long userId, String content, String city) {
     }
 
     public record ChatSendResponse(

@@ -44,7 +44,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             }
 
             Long userId = request.userId() == null ? DEFAULT_USER_ID : request.userId();
-            ChatSendResponse response = chatService.send(new ChatSendRequest(userId, request.content()));
+            ChatSendResponse response = chatService.send(new ChatSendRequest(userId, request.content(), request.city()));
             session.sendMessage(new TextMessage(objectMapper.writeValueAsString(
                     new ChatSocketResponse(
                             "reply",
@@ -70,7 +70,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         )));
     }
 
-    public record ChatSocketRequest(String type, Long userId, String content) {
+    public record ChatSocketRequest(String type, Long userId, String content, String city) {
     }
 
     public record ChatSocketResponse(

@@ -10,6 +10,7 @@ import { chatApi } from '../api/chat'
 
 const DEFAULT_CITY = '北京'
 const GEOLOCATION_TIMEOUT = 5000
+const WEATHER_CITY_STORAGE_KEY = 'dj-weather-city'
 
 const weather = ref({
   icon: '☀️',
@@ -44,6 +45,7 @@ async function loadWeather() {
       obsTime: res.data.obsTime || '',
       message: sourceMessage(location.source, res.data.message)
     }
+    rememberWeatherCity(weather.value.city)
     locationSource.value = location.source
     greeting.value = res.data.greeting || '想听点什么？'
   } catch (e) {
@@ -87,6 +89,12 @@ function currentPosition() {
 function sourceMessage(source, message) {
   const prefix = source === 'geolocation' ? '浏览器定位城市' : '默认城市'
   return message ? `${prefix}；${message}` : prefix
+}
+
+function rememberWeatherCity(city) {
+  if (city) {
+    localStorage.setItem(WEATHER_CITY_STORAGE_KEY, city)
+  }
 }
 </script>
 

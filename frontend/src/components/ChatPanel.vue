@@ -9,6 +9,7 @@ import { Connection, Headset, Promotion, User } from '@element-plus/icons-vue'
 import { chatApi } from '../api/chat'
 
 const USER_ID = 1
+const WEATHER_CITY_STORAGE_KEY = 'dj-weather-city'
 
 const connected = ref(false)
 const input = ref('')
@@ -52,7 +53,7 @@ async function send() {
   await scrollToBottom()
 
   if (socket && socket.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify({ type: 'message', userId: USER_ID, content }))
+    socket.send(JSON.stringify({ type: 'message', userId: USER_ID, content, city: currentWeatherCity() }))
     startReplyTimer()
     return
   }
@@ -105,7 +106,7 @@ function connectSocket() {
 
 async function sendByRest(content) {
   try {
-    const res = await chatApi.send({ userId: USER_ID, content })
+    const res = await chatApi.send({ userId: USER_ID, content, city: currentWeatherCity() })
     const reply = res.data.reply
     const songs = res.data.songs || []
     messages.value.push({
@@ -126,6 +127,10 @@ async function sendByRest(content) {
     sending.value = false
     await scrollToBottom()
   }
+}
+
+function currentWeatherCity() {
+  return localStorage.getItem(WEATHER_CITY_STORAGE_KEY) || ''
 }
 
 function startReplyTimer() {

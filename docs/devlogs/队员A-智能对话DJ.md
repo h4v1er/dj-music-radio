@@ -60,4 +60,5 @@
 - [x] `WeatherService` 支持 `QWEATHER_API_HOST`，兼容和风天气新版专属 API Host；保留 `QWEATHER_WEATHER_URL` / `QWEATHER_GEO_URL` 手动覆盖能力
 - [x] `WeatherWidget.vue` 显示“实时 / 演示数据”来源标识，鼠标悬停可查看后端返回的来源说明
 - [x] `WeatherWidget.vue` 优先使用浏览器定位经纬度查询天气；定位拒绝、超时或不可用时回退默认城市北京
+- [x] `ChatPanel.vue` 将定位城市传给 `/chat/send` 和 `/chat/ws`；`ChatService` 支持使用前端城市或最近天气上下文回答“我这里/今天的天气”等省略城市的问题
 - [x] 新增 [module-chat-runtime.md](../module-chat-runtime.md)，记录 DeepSeek、和风天气环境变量、远端计划任务重启和天气接口验证方式
