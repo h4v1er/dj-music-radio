@@ -245,9 +245,12 @@ function playSong(song) {
     </div>
 
     <div class="right">
-      <el-button v-if="!loggedIn" size="small" type="primary" plain @click="showLogin = true">登录 / 注册</el-button>
-      <el-dropdown v-else trigger="hover" placement="top-end" @command="handleUserCommand">
-        <el-button size="small" plain class="account-menu-btn">账户操作</el-button>
+      <el-button v-if="!loggedIn" size="small" type="primary" plain class="login-btn" @click="showLogin = true">登录 / 注册</el-button>
+      <el-dropdown v-else trigger="hover" placement="top-end" popper-class="user-account-popper" @command="handleUserCommand">
+        <el-button size="small" plain class="account-menu-btn">
+          <span class="account-dot"></span>
+          账户操作
+        </el-button>
         <template #dropdown>
           <el-dropdown-menu>
             <el-dropdown-item command="favorites">❤ 我的收藏</el-dropdown-item>
@@ -259,7 +262,7 @@ function playSong(song) {
       </el-dropdown>
     </div>
 
-    <el-dialog v-model="showLogin" :title="isRegister ? '注册' : '登录'" width="380px">
+    <el-dialog v-model="showLogin" :title="isRegister ? '注册' : '登录'" width="380px" class="user-dialog" modal-class="user-dialog-mask">
       <template v-if="!isRegister">
         <el-input v-model="loginForm.username" placeholder="用户名" style="margin-bottom:12px" />
         <el-input
@@ -288,7 +291,7 @@ function playSong(song) {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showFavorite" title="我的收藏" width="440px">
+    <el-dialog v-model="showFavorite" title="我的收藏" width="440px" class="user-dialog user-list-dialog" modal-class="user-dialog-mask">
       <div v-if="favorites.length === 0" class="empty-state">暂无收藏</div>
       <div v-for="song in favorites" :key="song.id" class="song-row">
         <button class="song-main" @click="playSong(song)">
@@ -299,7 +302,7 @@ function playSong(song) {
       </div>
     </el-dialog>
 
-    <el-dialog v-model="showHistory" title="播放历史" width="440px">
+    <el-dialog v-model="showHistory" title="播放历史" width="440px" class="user-dialog user-list-dialog" modal-class="user-dialog-mask">
       <div v-if="histories.length === 0" class="empty-state">暂无播放记录</div>
       <button v-for="song in histories" :key="song.id" class="history-row" @click="playSong(song)">
         <span class="song-title">{{ song.title || '未知歌曲' }}</span>
@@ -307,7 +310,7 @@ function playSong(song) {
       </button>
     </el-dialog>
 
-    <el-dialog v-model="showPassword" title="修改密码" width="380px">
+    <el-dialog v-model="showPassword" title="修改密码" width="380px" class="user-dialog" modal-class="user-dialog-mask">
       <el-input
         v-model="passwordForm.oldPassword"
         placeholder="原密码"
@@ -351,7 +354,27 @@ function playSong(song) {
 .dot { width: 7px; height: 7px; border-radius: 50%; }
 .divider { color: var(--color-border); }
 .username { color: var(--color-text); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.account-menu-btn { min-width: 86px; }
+.login-btn,
+.account-menu-btn {
+  --el-button-bg-color: transparent;
+  --el-button-border-color: var(--color-border);
+  --el-button-text-color: var(--color-text);
+  --el-button-hover-bg-color: var(--color-surface-hover);
+  --el-button-hover-border-color: var(--color-primary);
+  --el-button-hover-text-color: var(--color-text);
+}
+.account-menu-btn {
+  min-width: 98px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.account-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-success);
+}
 .dialog-actions { display: flex; justify-content: space-between; align-items: center; }
 .empty-state {
   color: var(--color-text-muted);
@@ -400,5 +423,102 @@ function playSong(song) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+</style>
+
+<style>
+.user-account-popper.el-popper {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.user-account-popper .el-popper__arrow::before {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+}
+
+.user-account-popper .el-dropdown-menu {
+  min-width: 150px;
+  padding: 6px;
+  border: 0;
+  background: var(--color-surface);
+}
+
+.user-account-popper .el-dropdown-menu__item {
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.user-account-popper .el-dropdown-menu__item:not(.is-disabled):focus,
+.user-account-popper .el-dropdown-menu__item:not(.is-disabled):hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.user-account-popper .el-dropdown-menu__item--divided {
+  border-top-color: var(--color-border);
+}
+
+.user-dialog-mask {
+  background: rgba(5, 5, 12, 0.58);
+  backdrop-filter: blur(3px);
+}
+
+.user-dialog.el-dialog {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.user-dialog .el-dialog__header {
+  padding: 18px 22px 8px;
+}
+
+.user-dialog .el-dialog__title {
+  color: var(--color-text);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.user-dialog .el-dialog__headerbtn .el-dialog__close {
+  color: var(--color-text-muted);
+}
+
+.user-dialog .el-dialog__body {
+  padding: 14px 22px 20px;
+  color: var(--color-text);
+}
+
+.user-dialog .el-input__wrapper {
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  box-shadow: 0 0 0 1px var(--color-border) inset;
+}
+
+.user-dialog .el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 1px var(--color-primary) inset;
+}
+
+.user-dialog .el-input__inner {
+  color: var(--color-text);
+}
+
+.user-dialog .el-input__inner::placeholder {
+  color: var(--color-text-dim);
+}
+
+.user-dialog .el-button--primary {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+
+.user-list-dialog .el-dialog__body {
+  max-height: 60vh;
+  overflow-y: auto;
 }
 </style>
