@@ -77,7 +77,8 @@ function connectSocket() {
       if (data.type === 'reply') {
         messages.value.push({
           role: 'dj',
-          text: formatReply(data.content, data.songs || []),
+          text: data.content,
+          songs: normalizeSongItems(data.selectedSongs, data.songs || []),
           time: data.time || '刚刚'
         })
       } else if (data.type === 'error') {
@@ -109,7 +110,8 @@ async function sendByRest(content) {
     const songs = res.data.songs || []
     messages.value.push({
       role: reply.role || 'dj',
-      text: formatReply(reply.text, songs),
+      text: reply.text,
+      songs: normalizeSongItems(res.data.selectedSongs, songs),
       time: reply.time || '刚刚'
     })
     connected.value = true
@@ -151,12 +153,65 @@ function normalizeMessages(list) {
   if (!Array.isArray(list) || list.length === 0) {
     return [{ role: 'dj', text: '下午好！我是你的 DJ 助手，想听点什么？', time: '' }]
   }
-  return list
+  return list.map(item => ({ ...item, songs: item.songs || [] }))
 }
 
-function formatReply(text, songs) {
-  if (!songs.length) return text
-  return `${text}\n${songs.map((song, index) => `${index + 1}. ${song}`).join('\n')}`
+function normalizeSongItems(selectedSongs, fallbackSongs) {
+  if (Array.isArray(selectedSongs) && selectedSongs.length) {
+    return selectedSongs.map(song => ({
+      ...song,
+      label: songLabel(song),
+      source: song.source || (song.netease ? 'NETEASE' : 'PROJECT')
+    }))
+  }
+  if (!Array.isArray(fallbackSongs)) return []
+  return fallbackSongs.map((song, index) => ({
+    id: null,
+    sourceId: '',
+    title: String(song),
+    artist: '',
+    source: 'TEXT',
+    playable: false,
+    label: String(song),
+    _key: `text-${index}-${song}`
+  }))
+}
+
+function songLabel(song) {
+  if (song.label) return song.label
+  if (!song.artist) return song.title || '未知歌曲'
+  return `${song.title} - ${song.artist}`
+}
+
+function playChatSong(song) {
+  if (!song?.playable) return
+  window.dispatchEvent(new CustomEvent('dj-play-song', {
+    detail: normalizePlayableSong(song)
+  }))
+}
+
+function normalizePlayableSong(song) {
+  const netease = song.netease || song.source === 'NETEASE'
+  const sourceId = song.sourceId || (netease ? song.id : '')
+  return {
+    id: song.id || song.songId || sourceId,
+    sourceId,
+    title: song.title,
+    artist: song.artist,
+    album: song.album || '',
+    genre: song.genre || (netease ? '网易云' : ''),
+    coverUrl: song.coverUrl || '',
+    filePath: song.filePath || '',
+    duration: normalizeDuration(song.duration),
+    source: netease ? 'NETEASE' : song.source,
+    _netease: netease
+  }
+}
+
+function normalizeDuration(duration) {
+  const value = Number(duration || 0)
+  if (!Number.isFinite(value)) return 0
+  return value > 10000 ? Math.floor(value / 1000) : value
 }
 
 async function scrollToBottom() {
@@ -196,6 +251,20 @@ async function scrollToBottom() {
             <time v-if="m.time">{{ m.time }}</time>
           </div>
           <p>{{ m.text }}</p>
+          <ol v-if="m.songs?.length" class="song-links">
+            <li v-for="(song, songIndex) in m.songs" :key="song.sourceId || song.id || song._key || songIndex">
+              <button
+                class="song-link"
+                :class="{ disabled: !song.playable }"
+                :disabled="!song.playable"
+                :title="song.playable ? '播放这首歌' : '这条结果暂时不能直接播放'"
+                @click="playChatSong(song)"
+              >
+                <span class="song-link-title">{{ song.label || songLabel(song) }}</span>
+                <span v-if="song.source && song.source !== 'TEXT'" class="song-link-source">{{ song.source === 'NETEASE' ? '网易云' : '本地' }}</span>
+              </button>
+            </li>
+          </ol>
         </div>
       </div>
     </div>
@@ -375,6 +444,54 @@ async function scrollToBottom() {
   line-height: 1.55;
   white-space: pre-line;
   overflow-wrap: anywhere;
+}
+
+.song-links {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.song-links li {
+  padding-left: 2px;
+}
+
+.song-link {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.04);
+  text-align: left;
+  cursor: pointer;
+}
+
+.song-link:hover:not(:disabled) {
+  border-color: rgba(15, 155, 255, 0.35);
+  background: rgba(15, 155, 255, 0.1);
+}
+
+.song-link.disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.song-link-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.song-link-source {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  font-size: 11px;
 }
 
 .input-row {

@@ -4,7 +4,7 @@
  * 功能: 播放器 + 歌单管理 + 搜索 + 收藏 + 历史 + 导入
  * 后端: module-music (:8082)  MySQL + RabbitMQ
  */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import api, { getCoverUrl } from '../api/music'
 import PlayerCore from './music/PlayerCore.vue'
 import SongList from './music/SongList.vue'
@@ -314,10 +314,51 @@ async function playNeteaseSong(song) {
   playQueue.value.push(song)
 }
 
+async function playExternalSong(event) {
+  const song = normalizeExternalSong(event.detail)
+  if (!song) return
+  if (song._netease) {
+    activeTab.value = 'netease'
+    await playNeteaseSong(song)
+    return
+  }
+  await playSong(song)
+}
+
+function normalizeExternalSong(song) {
+  if (!song || !song.title) return null
+  const netease = song._netease || song.source === 'NETEASE'
+  const sourceId = song.sourceId || (netease ? song.id : '')
+  return {
+    id: song.id || song.songId || sourceId,
+    sourceId,
+    title: song.title,
+    artist: song.artist || '',
+    album: song.album || '',
+    duration: normalizeDuration(song.duration),
+    genre: song.genre || (netease ? '网易云' : ''),
+    coverUrl: song.coverUrl || '',
+    filePath: song.filePath || '',
+    source: netease ? 'NETEASE' : song.source,
+    _netease: netease
+  }
+}
+
+function normalizeDuration(duration) {
+  const value = Number(duration || 0)
+  if (!Number.isFinite(value)) return 0
+  return value > 10000 ? Math.floor(value / 1000) : value
+}
+
 // ── 初始化 ──
 onMounted(async () => {
   try { await api.hello(); connected.value = true } catch (e) { /* ignore */ }
   await loadSongs()
+  window.addEventListener('dj-play-song', playExternalSong)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('dj-play-song', playExternalSong)
 })
 </script>
 

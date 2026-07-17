@@ -49,8 +49,11 @@ public class DeepSeekChatClient {
             - weather.now: current weather by city. Use for weather questions or weather-aware music recommendations.
 
             Planning rules:
+            - Behave like a normal AI assistant first. Tool use is optional, not the default.
             - Ordinary chat, identity questions, stories, explanations, greetings, and emotional conversation do not need tools unless the user asks for factual app data, weather, or songs.
-            - For music recommendation, choose tools with clear purpose. Do not call every tool by default.
+            - If the message is only a bare name, artist, topic, or fragment without a clear request, set needClarification=true and ask what the user wants to do with it. Do not call tools yet.
+            - If the user intent is ambiguous, ask one short clarification question instead of guessing.
+            - For music recommendation, choose tools only when the user clearly asks to find, recommend, play, search, or compare songs. Do not call every tool by default.
             - For semantic scene-based music, prefer music.catalog plus rec.preferences; add weather.now only if weather or city matters.
             - For explicit artist/title, prefer music.search; add music.neteaseSearch when the request asks NetEase or the local DB may miss it.
             - For "daily", "random", "不知道听什么", prefer rec.daily plus rec.preferences; add rec.hot as a fallback.
@@ -61,6 +64,8 @@ public class DeepSeekChatClient {
             {
               "chatMode": "general|music|weather|story|smalltalk",
               "answerGoal": "what the assistant should accomplish",
+              "needClarification": false,
+              "clarificationQuestion": "",
               "needTools": true,
               "tools": [
                 {
@@ -91,6 +96,7 @@ public class DeepSeekChatClient {
             General rules:
             - Do not force ordinary chat back to music.
             - Identity questions can be answered naturally: you are the AI assistant for this music radio app, powered by the configured model service.
+            - If the plan says needClarification=true, ask the clarification question naturally and selectedIndexes=[].
             - For weather-only questions, answer using weather tool results and selectedIndexes=[].
             - Keep replies concise but natural.
 
@@ -139,6 +145,8 @@ public class DeepSeekChatClient {
             ToolPlan plan = new ToolPlan(
                     text(map, "chatMode", "general"),
                     text(map, "answerGoal", ""),
+                    bool(map, "needClarification", false),
+                    text(map, "clarificationQuestion", ""),
                     bool(map, "needTools", false),
                     parseToolCalls(map.get("tools"), normalizedInput),
                     text(map, "responseStyle", "")
@@ -184,8 +192,8 @@ public class DeepSeekChatClient {
             Map<String, Object> map = objectMapper.readValue(cleanJson(content), new TypeReference<>() {
             });
             String reply = text(map, "reply", "");
-            List<String> songs = songsByIndexes(map.get("selectedIndexes"), candidates);
-            return new AiReply(reply, songs);
+            List<Integer> selectedIndexes = selectedIndexes(map.get("selectedIndexes"), candidates);
+            return new AiReply(reply, selectedIndexes);
         } catch (Exception e) {
             log.warn("DeepSeek final reply failed: {}", e.getMessage());
             return AiReply.empty();
@@ -278,26 +286,25 @@ public class DeepSeekChatClient {
         return builder.toString().trim();
     }
 
-    private static List<String> songsByIndexes(Object value, List<ChatService.SongCandidate> candidates) {
+    private static List<Integer> selectedIndexes(Object value, List<ChatService.SongCandidate> candidates) {
         if (candidates == null || candidates.isEmpty()) {
             return List.of();
         }
         List<Integer> indexes = new ArrayList<>();
         collectIndexes(value, indexes);
-        List<String> songs = new ArrayList<>();
+        List<Integer> selected = new ArrayList<>();
         for (Integer index : indexes) {
             if (index == null || index < 1 || index > candidates.size()) {
                 continue;
             }
-            String label = candidates.get(index - 1).label();
-            if (!label.isBlank() && !songs.contains(label)) {
-                songs.add(label);
+            if (!selected.contains(index)) {
+                selected.add(index);
             }
-            if (songs.size() >= 8) {
+            if (selected.size() >= 8) {
                 break;
             }
         }
-        return songs;
+        return selected;
     }
 
     private static void collectIndexes(Object value, List<Integer> indexes) {
@@ -437,6 +444,8 @@ public class DeepSeekChatClient {
     public record ToolPlan(
             String chatMode,
             String answerGoal,
+            boolean needClarification,
+            String clarificationQuestion,
             boolean needTools,
             List<ToolCallPlan> tools,
             String responseStyle) {
@@ -458,10 +467,30 @@ public class DeepSeekChatClient {
                 }
             }
             String mode = weather && !music ? "weather" : music ? "music" : "general";
-            return new ToolPlan(mode, "", !calls.isEmpty(), calls, "").normalized(normalized);
+            boolean ambiguous = looksLikeBareFragment(normalized);
+            return new ToolPlan(
+                    ambiguous ? "general" : mode,
+                    "",
+                    ambiguous,
+                    ambiguous ? "你是想了解这个人/话题，还是想让我帮你找相关音乐？" : "",
+                    !ambiguous && !calls.isEmpty(),
+                    ambiguous ? List.of() : calls,
+                    ""
+            ).normalized(normalized);
         }
 
         public ToolPlan normalized(String userInput) {
+            if (needClarification) {
+                return new ToolPlan(
+                        normalize(chatMode, "general"),
+                        normalize(answerGoal, ""),
+                        true,
+                        normalize(clarificationQuestion, "你想让我具体帮你做什么？"),
+                        false,
+                        List.of(),
+                        normalize(responseStyle, "")
+                );
+            }
             List<ToolCallPlan> safeTools = tools == null ? List.of() : tools.stream()
                     .map(tool -> tool == null ? null : tool.normalized(userInput))
                     .filter(tool -> tool != null && ALLOWED_TOOLS.contains(tool.name()))
@@ -478,6 +507,8 @@ public class DeepSeekChatClient {
             return new ToolPlan(
                     normalize(chatMode, shouldUseTools ? "music" : "general"),
                     normalize(answerGoal, ""),
+                    false,
+                    "",
                     shouldUseTools,
                     safeTools,
                     normalize(responseStyle, "")
@@ -502,6 +533,23 @@ public class DeepSeekChatClient {
                     || value.contains("晴")
                     || value.contains("阴天")
                     || value.contains("气温");
+        }
+
+        private static boolean looksLikeBareFragment(String value) {
+            String text = value == null ? "" : value.trim();
+            if (text.isBlank() || text.length() > 40) {
+                return false;
+            }
+            if (looksLikeWeatherRequest(text)) {
+                return false;
+            }
+            for (String marker : List.of("吗", "?", "？", "谁", "什么", "怎么", "为什么", "推荐", "播放", "搜", "搜索", "听", "歌", "音乐", "天气")) {
+                if (text.contains(marker)) {
+                    return false;
+                }
+            }
+            String[] parts = text.split("\\s+");
+            return parts.length <= 3;
         }
 
         private static String extractLocation(String value) {
@@ -537,7 +585,7 @@ public class DeepSeekChatClient {
         }
     }
 
-    public record AiReply(String reply, List<String> songs) {
+    public record AiReply(String reply, List<Integer> selectedIndexes) {
 
         public static AiReply empty() {
             return new AiReply("", List.of());

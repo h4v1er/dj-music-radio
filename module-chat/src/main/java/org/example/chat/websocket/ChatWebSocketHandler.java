@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.chat.service.ChatService;
 import org.example.chat.service.ChatService.ChatSendRequest;
 import org.example.chat.service.ChatService.ChatSendResponse;
+import org.example.chat.service.ChatService.SelectedSong;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -29,7 +30,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         session.sendMessage(new TextMessage(objectMapper.writeValueAsString(
-                new ChatSocketResponse("connected", "DJ WebSocket 已连接", List.of(), null)
+                new ChatSocketResponse("connected", "DJ WebSocket 已连接", List.of(), List.of(), null)
         )));
     }
 
@@ -49,6 +50,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                             "reply",
                             response.reply().text(),
                             response.songs(),
+                            response.selectedSongs(),
                             response.reply().time()
                     )
             )));
@@ -64,13 +66,18 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     private void sendError(WebSocketSession session, String content) throws IOException {
         session.sendMessage(new TextMessage(objectMapper.writeValueAsString(
-                new ChatSocketResponse("error", content, List.of(), null)
+                new ChatSocketResponse("error", content, List.of(), List.of(), null)
         )));
     }
 
     public record ChatSocketRequest(String type, Long userId, String content) {
     }
 
-    public record ChatSocketResponse(String type, String content, List<String> songs, String time) {
+    public record ChatSocketResponse(
+            String type,
+            String content,
+            List<String> songs,
+            List<SelectedSong> selectedSongs,
+            String time) {
     }
 }

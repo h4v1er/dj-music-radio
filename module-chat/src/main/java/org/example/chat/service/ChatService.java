@@ -58,6 +58,15 @@ public class ChatService {
         ChatMessage userMessage = new ChatMessage("user", content, now());
 
         DeepSeekChatClient.ToolPlan plan = deepSeekChatClient.planToolUse(content, recentHistory);
+        if (plan.needClarification()) {
+            String question = plan.clarificationQuestion().isBlank()
+                    ? "你想让我具体帮你做什么？"
+                    : plan.clarificationQuestion();
+            ChatMessage reply = new ChatMessage("dj", question, now());
+            appendHistory(userId, userMessage);
+            appendHistory(userId, reply);
+            return new ChatSendResponse(reply, List.of(), List.of(), List.of());
+        }
         ToolExecution execution = executeTools(userId, content, plan);
         DeepSeekChatClient.AiReply aiReply = deepSeekChatClient.composeReply(
                 content,
@@ -67,10 +76,11 @@ public class ChatService {
                 recentHistory
         );
 
-        List<String> songs = aiReply.songs();
-        if (songs.isEmpty() && plansMusicTools(plan) && !execution.candidates().isEmpty() && aiReply.reply().isBlank()) {
-            songs = execution.candidates().stream().limit(3).map(SongCandidate::label).toList();
+        List<SelectedSong> selectedSongs = selectedSongs(aiReply.selectedIndexes(), execution.candidates());
+        if (selectedSongs.isEmpty() && plansMusicTools(plan) && !execution.candidates().isEmpty() && aiReply.reply().isBlank()) {
+            selectedSongs = execution.candidates().stream().limit(3).map(ChatService::toSelectedSong).toList();
         }
+        List<String> songs = selectedSongs.stream().map(SelectedSong::label).toList();
         String replyText = aiReply.reply();
         if (replyText.isBlank()) {
             replyText = buildFallbackReply(content, plan, execution);
@@ -80,7 +90,7 @@ public class ChatService {
         appendHistory(userId, userMessage);
         appendHistory(userId, reply);
 
-        return new ChatSendResponse(reply, songs, execution.toolResults());
+        return new ChatSendResponse(reply, songs, selectedSongs, execution.toolResults());
     }
 
     public List<ChatMessage> history(Long userId) {
@@ -242,6 +252,49 @@ public class ChatService {
         return new ToolResult(call.name(), call.purpose(), "ok", summary, Math.max(songCount, 0));
     }
 
+    private static List<SelectedSong> selectedSongs(List<Integer> indexes, List<SongCandidate> candidates) {
+        if (indexes == null || indexes.isEmpty() || candidates == null || candidates.isEmpty()) {
+            return List.of();
+        }
+        List<SelectedSong> selected = new ArrayList<>();
+        for (Integer index : indexes) {
+            if (index == null || index < 1 || index > candidates.size()) {
+                continue;
+            }
+            SelectedSong song = toSelectedSong(candidates.get(index - 1));
+            if (selected.stream().noneMatch(item -> item.key().equals(song.key()))) {
+                selected.add(song);
+            }
+            if (selected.size() >= 8) {
+                break;
+            }
+        }
+        return selected;
+    }
+
+    private static SelectedSong toSelectedSong(SongCandidate song) {
+        boolean netease = song.source() != null && song.source().contains("NETEASE");
+        String source = netease ? "NETEASE" : song.source();
+        String sourceId = song.sourceId() == null || song.sourceId().isBlank()
+                ? song.id() == null ? "" : String.valueOf(song.id())
+                : song.sourceId();
+        return new SelectedSong(
+                song.id(),
+                netease ? null : song.id(),
+                sourceId,
+                source,
+                song.title(),
+                song.artist(),
+                song.album(),
+                song.genre(),
+                song.coverUrl(),
+                song.filePath(),
+                song.duration(),
+                netease,
+                true
+        );
+    }
+
     private static String buildFallbackReply(
             String content,
             DeepSeekChatClient.ToolPlan plan,
@@ -366,12 +419,16 @@ public class ChatService {
         }
         return new SongCandidate(
                 longValue(firstValue(map, "id", "songId", "song_id")),
+                firstText(map, "sourceId", "source_id"),
                 title,
                 artistText(map),
                 albumText(map),
                 firstText(map, "genre", "style"),
                 firstText(map, "emotionTags", "emotion_tags", "tags"),
                 intValue(firstValue(map, "playCount", "play_count", "score", "rank")),
+                firstText(map, "coverUrl", "cover_url", "picUrl"),
+                firstText(map, "filePath", "file_path", "url"),
+                intValue(firstValue(map, "duration", "dt")),
                 source,
                 reason
         );
@@ -511,7 +568,11 @@ public class ChatService {
     public record ChatSendRequest(Long userId, String content) {
     }
 
-    public record ChatSendResponse(ChatMessage reply, List<String> songs, List<ToolResult> toolCalls) {
+    public record ChatSendResponse(
+            ChatMessage reply,
+            List<String> songs,
+            List<SelectedSong> selectedSongs,
+            List<ToolResult> toolCalls) {
     }
 
     public record ChatMessage(String role, String text, String time) {
@@ -520,17 +581,45 @@ public class ChatService {
     public record ToolResult(String name, String purpose, String status, String summary, int songCount) {
     }
 
+    public record SelectedSong(
+            Long id,
+            Long songId,
+            String sourceId,
+            String source,
+            String title,
+            String artist,
+            String album,
+            String genre,
+            String coverUrl,
+            String filePath,
+            Integer duration,
+            boolean netease,
+            boolean playable) {
+
+        public String label() {
+            return artist == null || artist.isBlank() ? title : title + " - " + artist;
+        }
+
+        public String key() {
+            return (source == null ? "" : source) + ":" + (sourceId == null || sourceId.isBlank() ? id : sourceId);
+        }
+    }
+
     private record ToolExecution(List<SongCandidate> candidates, List<ToolResult> toolResults) {
     }
 
     public record SongCandidate(
             Long id,
+            String sourceId,
             String title,
             String artist,
             String album,
             String genre,
             String emotionTags,
             Integer playCount,
+            String coverUrl,
+            String filePath,
+            Integer duration,
             String source,
             String reason) {
 
