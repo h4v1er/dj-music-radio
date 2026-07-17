@@ -52,6 +52,27 @@ docs/架构设计.md
 
 完整步骤以 [docs/新人运行手册.md](./docs/新人运行手册.md) 为准。当前后端父 POM 使用 Java 25，远端 Windows 构建请使用 JDK25 脚本。
 
+答辩机 / 远端 Windows 已配置计划任务时，推荐直接使用一键脚本：
+
+```powershell
+cd D:\projects\dj-music-radio
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\start-dj-music-radio.ps1
+```
+
+关闭整套演示环境：
+
+```powershell
+cd D:\projects\dj-music-radio
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\stop-dj-music-radio.ps1
+```
+
+也可以直接双击：
+
+```text
+scripts\windows\start-dj-music-radio.cmd
+scripts\windows\stop-dj-music-radio.cmd
+```
+
 ```powershell
 cd D:\projects\dj-music-radio
 powershell -ExecutionPolicy Bypass -File D:\projects\mvn25-dj-music-radio.ps1 clean package -DskipTests
