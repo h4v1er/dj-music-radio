@@ -218,15 +218,17 @@ onUnmounted(() => {
 
     <!-- 播放控制 -->
     <div class="controls">
-      <button class="ctrl-btn mode-btn" :title="modeLabel" @click="cycleMode">
+      <button class="ctrl-btn mode-btn control-side control-side-left" :title="modeLabel" @click="cycleMode">
         {{ modeIcon }}
       </button>
-      <button class="ctrl-btn" title="上一首" @click="emit('prev')">⏮</button>
-      <button class="ctrl-btn play-btn" :class="{ active: isPlaying }" @click="togglePlay">
-        {{ isPlaying ? '⏸' : '▶' }}
-      </button>
-      <button class="ctrl-btn" title="下一首" @click="emit('next')">⏭</button>
-      <div class="volume-group">
+      <div class="transport-controls">
+        <button class="ctrl-btn" title="上一首" @click="emit('prev')">⏮</button>
+        <button class="ctrl-btn play-btn" :class="{ active: isPlaying }" @click="togglePlay">
+          {{ isPlaying ? '⏸' : '▶' }}
+        </button>
+        <button class="ctrl-btn" title="下一首" @click="emit('next')">⏭</button>
+      </div>
+      <div class="volume-group control-side control-side-right">
         <button class="ctrl-btn volume-icon" @click="toggleMute">
           {{ isMuted || volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊' }}
         </button>
@@ -258,13 +260,15 @@ onUnmounted(() => {
             <span class="time">{{ formattedDuration }}</span>
           </div>
           <div class="controls focus-controls">
-            <button class="ctrl-btn mode-btn" :title="modeLabel" @click="cycleMode">{{ modeIcon }}</button>
-            <button class="ctrl-btn" title="上一首" @click="emit('prev')">⏮</button>
-            <button class="ctrl-btn play-btn" :class="{ active: isPlaying }" @click="togglePlay">
-              {{ isPlaying ? '⏸' : '▶' }}
-            </button>
-            <button class="ctrl-btn" title="下一首" @click="emit('next')">⏭</button>
-            <div class="volume-group">
+            <button class="ctrl-btn mode-btn control-side control-side-left" :title="modeLabel" @click="cycleMode">{{ modeIcon }}</button>
+            <div class="transport-controls">
+              <button class="ctrl-btn" title="上一首" @click="emit('prev')">⏮</button>
+              <button class="ctrl-btn play-btn" :class="{ active: isPlaying }" @click="togglePlay">
+                {{ isPlaying ? '⏸' : '▶' }}
+              </button>
+              <button class="ctrl-btn" title="下一首" @click="emit('next')">⏭</button>
+            </div>
+            <div class="volume-group control-side control-side-right">
               <button class="ctrl-btn volume-icon" @click="toggleMute">
                 {{ isMuted || volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊' }}
               </button>
@@ -343,8 +347,26 @@ onUnmounted(() => {
 /* 控制按钮 */
 .controls {
   width: 100%;
-  display: flex; align-items: center; justify-content: center;
-  gap: 10px; margin-top: 12px; flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 12px;
+  margin-top: 12px;
+}
+.control-side {
+  min-width: 0;
+}
+.control-side-left {
+  justify-self: end;
+}
+.control-side-right {
+  justify-self: start;
+}
+.transport-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
 }
 .ctrl-btn {
   background: none; border: 1px solid var(--color-border);
@@ -491,4 +513,29 @@ onUnmounted(() => {
 }
 
 .focus-controls .volume-slider { width: 110px; }
+
+@media (max-width: 560px) {
+  .controls {
+    grid-template-columns: 1fr;
+    row-gap: 10px;
+  }
+
+  .control-side-left,
+  .control-side-right,
+  .transport-controls {
+    justify-self: center;
+  }
+
+  .transport-controls {
+    grid-row: 1;
+  }
+
+  .control-side-left {
+    grid-row: 2;
+  }
+
+  .control-side-right {
+    grid-row: 3;
+  }
+}
 </style>
