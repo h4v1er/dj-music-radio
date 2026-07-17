@@ -1,13 +1,13 @@
-# ===== 👤队员B - 音乐中心模块 =====
+# ===== 馃懁闃熷憳B - 闊充箰涓績妯″潡 =====
 server:
   port: 8082
 
-# DeepSeek AI 情绪分析（不配置则回退到关键词匹配）
+# DeepSeek AI 鎯呯华鍒嗘瀽锛堜笉閰嶇疆鍒欏洖閫€鍒板叧閿瘝鍖归厤锛?
 deepseek:
   api:
-    key: sk-512967b2b61c41b0b7169f553ba8e96a
-    url: https://api.deepseek.com/v1/chat/completions
-  model: deepseek-chat
+    key: ${DEEPSEEK_API_KEY:}
+    url: ${DEEPSEEK_API_URL:https://api.deepseek.com/v1/chat/completions}
+  model: ${DEEPSEEK_MODEL:deepseek-chat}
 
 spring:
   application:
