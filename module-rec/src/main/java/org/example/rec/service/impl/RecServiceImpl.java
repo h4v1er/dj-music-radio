@@ -81,6 +81,103 @@ public class RecServiceImpl extends ServiceImpl<DailyRecommendMapper, DailyRecom
         return result;
     }
 
+    @Override
+    public List<Map<String, Object>> refreshDailyRecommend(Integer userId) {
+        if (userId == null) {
+            return Collections.emptyList();
+        }
+
+        List<Map<String, Object>> topSongs = getUserTopSongs(userId, 8);
+        if (topSongs.isEmpty()) {
+            deleteTodayRecommendations(userId);
+            return Collections.emptyList();
+        }
+
+        Set<Integer> listenedSongIds = topSongs.stream()
+                .map(row -> toInteger(row.get("song_id")))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Set<Integer> recommendedSongIds = new LinkedHashSet<>();
+        List<DailyRecommend> generated = new ArrayList<>();
+
+        for (Map<String, Object> row : topSongs) {
+            Integer sourceSongId = toInteger(row.get("song_id"));
+            if (sourceSongId == null) {
+                continue;
+            }
+
+            SongDTO sourceSong = findSongById(sourceSongId);
+            if (sourceSong != null && sourceSong.getGenre() != null && !sourceSong.getGenre().isBlank()) {
+                appendDailyRecommendations(
+                        userId,
+                        generated,
+                        recommendedSongIds,
+                        listenedSongIds,
+                        searchByGenre(sourceSongId, sourceSong.getGenre())
+                );
+            }
+
+            if (generated.size() < 10 && sourceSong != null && sourceSong.getArtist() != null && !sourceSong.getArtist().isBlank()) {
+                appendDailyRecommendations(
+                        userId,
+                        generated,
+                        recommendedSongIds,
+                        listenedSongIds,
+                        searchByArtist(sourceSongId, sourceSong.getArtist())
+                );
+            }
+
+            if (generated.size() < 10) {
+                appendDailyRecommendations(
+                        userId,
+                        generated,
+                        recommendedSongIds,
+                        listenedSongIds,
+                        getBehaviorBasedSimilar(sourceSongId)
+                );
+            }
+
+            if (generated.size() >= 10) {
+                break;
+            }
+        }
+
+        deleteTodayRecommendations(userId);
+        for (DailyRecommend rec : generated) {
+            baseMapper.insert(rec);
+        }
+        return getDailyRecommend(userId);
+    }
+
+    private void appendDailyRecommendations(Integer userId,
+                                            List<DailyRecommend> target,
+                                            Set<Integer> recommendedSongIds,
+                                            Set<Integer> listenedSongIds,
+                                            List<Map<String, Object>> candidates) {
+        for (Map<String, Object> candidate : candidates) {
+            Integer songId = toInteger(candidate.get("songId"));
+            if (songId == null || listenedSongIds.contains(songId) || !recommendedSongIds.add(songId)) {
+                continue;
+            }
+            DailyRecommend rec = new DailyRecommend();
+            rec.setUserId(userId);
+            rec.setSongId(songId);
+            rec.setReason(stringValue(candidate.get("reason")));
+            rec.setPushDate(LocalDate.now());
+            target.add(rec);
+            if (target.size() >= 10) {
+                return;
+            }
+        }
+    }
+
+    private void deleteTodayRecommendations(Integer userId) {
+        LambdaQueryWrapper<DailyRecommend> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(DailyRecommend::getUserId, userId)
+               .eq(DailyRecommend::getPushDate, LocalDate.now());
+        baseMapper.delete(wrapper);
+    }
+
     /**
      * 通过 Feign 补全歌曲的标题和歌手信息
      * 若音乐服务不可用，至少保留 songId，前端可降级展示

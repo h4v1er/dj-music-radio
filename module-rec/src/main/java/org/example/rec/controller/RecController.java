@@ -33,6 +33,12 @@ public class RecController {
         return recService.getDailyRecommend(userId);
     }
 
+    /** 手动刷新今日推荐 */
+    @PostMapping("/daily/refresh")
+    public List<Map<String, Object>> refreshDaily(@RequestParam Integer userId) {
+        return recService.refreshDailyRecommend(userId);
+    }
+
     /** 相似歌曲推荐 */
     @GetMapping("/similar")
     public List<Map<String, Object>> similar(@RequestParam Integer songId) {

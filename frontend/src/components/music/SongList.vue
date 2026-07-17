@@ -15,7 +15,7 @@ const props = defineProps({
   dragMode: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['play', 'addToQueue', 'favorite', 'reorder'])
+const emit = defineEmits(['play', 'addToQueue', 'addToPlaylist', 'favorite', 'reorder'])
 
 // ── 搜索 ──
 const searchKw = ref('')
@@ -86,9 +86,15 @@ function showContextMenu(e, song) {
 function hideContextMenu() {
   contextMenu.value.show = false
 }
-function addToPlaylist() {
+function addToQueue() {
   if (contextMenu.value.song) {
     emit('addToQueue', contextMenu.value.song)
+  }
+  hideContextMenu()
+}
+function addToPlaylist() {
+  if (contextMenu.value.song) {
+    emit('addToPlaylist', contextMenu.value.song)
   }
   hideContextMenu()
 }
@@ -177,7 +183,8 @@ onMounted(async () => {
     <!-- 右键菜单 -->
     <div v-if="contextMenu.show" class="context-menu"
          :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }">
-      <div class="ctx-item" @click="addToPlaylist">➕ 添加到歌单</div>
+      <div class="ctx-item" @click="addToQueue">加入播放队列</div>
+      <div class="ctx-item" @click="addToPlaylist">添加到歌单</div>
       <div class="ctx-item" @click="toggleFavorite">❤ 收藏/取消收藏</div>
       <div class="ctx-item" @click="emit('play', contextMenu.song); hideContextMenu()">▶ 播放</div>
     </div>

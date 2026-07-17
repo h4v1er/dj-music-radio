@@ -6,6 +6,7 @@
  */
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import api, { getCoverUrl } from '../api/music'
+import { recApi } from '../api/rec'
 import PlayerCore from './music/PlayerCore.vue'
 import SongList from './music/SongList.vue'
 import PlaylistPanel from './music/PlaylistPanel.vue'
@@ -27,6 +28,13 @@ const showEmotion = ref(false)
 const activeTab = ref('all')    // all | playlists | favorites | history
 const currentPlaylistId = ref(null)
 const dragMode = ref(false)
+const addPlaylistVisible = ref(false)
+const addPlaylistSong = ref(null)
+const playlistOptions = ref([])
+const selectedAddPlaylistId = ref(null)
+const addPlaylistLoading = ref(false)
+const addPlaylistMessage = ref('')
+const quickPlaylistName = ref('')
 
 // ── 数据 ──
 const allSongs = ref([])
@@ -102,6 +110,7 @@ async function playSong(song) {
   api.recordPlay(song.id)
     .then(() => window.dispatchEvent(new CustomEvent('dj-user-library-changed', { detail: { type: 'history' } })))
     .catch(() => {})
+  reportRecBehavior(song, 'play')
   // 检查收藏状态
   checkFavStatus(song)
   // 如果没在队列中，加入队列
@@ -142,6 +151,15 @@ function addToQueue(song) {
   }
 }
 
+function isLocalSong(song) {
+  return !!song && !song._netease && song.source !== 'NETEASE' && Number.isFinite(Number(song.id))
+}
+
+function reportRecBehavior(song, action) {
+  if (!isLocalSong(song)) return
+  recApi.reportBehavior({ songId: Number(song.id), action }).catch(() => {})
+}
+
 // ── 收藏 ──
 async function toggleFavorite(song) {
   try {
@@ -152,6 +170,7 @@ async function toggleFavorite(song) {
     } else {
       await api.addFavorite(song.id)
       song._favorited = true
+      reportRecBehavior(song, 'like')
     }
     window.dispatchEvent(new CustomEvent('dj-user-library-changed', { detail: { type: 'favorite' } }))
     if (activeTab.value === 'favorites') await loadFavorites()
@@ -347,6 +366,79 @@ function normalizeExternalSong(song) {
   }
 }
 
+async function loadPlaylistOptions() {
+  addPlaylistLoading.value = true
+  try {
+    const res = await api.playlistList()
+    playlistOptions.value = res.data?.data || []
+    if (currentPlaylistId.value && playlistOptions.value.some(pl => pl.id === currentPlaylistId.value)) {
+      selectedAddPlaylistId.value = currentPlaylistId.value
+    } else if (!selectedAddPlaylistId.value && playlistOptions.value.length > 0) {
+      selectedAddPlaylistId.value = playlistOptions.value[0].id
+    }
+  } catch (e) {
+    console.error('加载歌单失败', e)
+    addPlaylistMessage.value = '歌单加载失败，请稍后重试'
+  } finally {
+    addPlaylistLoading.value = false
+  }
+}
+
+async function openAddToPlaylist(song) {
+  addPlaylistSong.value = song
+  addPlaylistVisible.value = true
+  addPlaylistMessage.value = ''
+  quickPlaylistName.value = ''
+  selectedAddPlaylistId.value = currentPlaylistId.value
+  await loadPlaylistOptions()
+}
+
+function closeAddPlaylistDialog() {
+  addPlaylistVisible.value = false
+  addPlaylistSong.value = null
+  addPlaylistMessage.value = ''
+  quickPlaylistName.value = ''
+}
+
+async function quickCreatePlaylist() {
+  const name = quickPlaylistName.value.trim()
+  if (!name) return
+  addPlaylistLoading.value = true
+  addPlaylistMessage.value = ''
+  try {
+    const res = await api.createPlaylist(name)
+    const created = res.data?.data
+    quickPlaylistName.value = ''
+    await loadPlaylistOptions()
+    if (created?.id) selectedAddPlaylistId.value = created.id
+    addPlaylistMessage.value = '歌单已创建，可以继续添加歌曲'
+  } catch (e) {
+    console.error('创建歌单失败', e)
+    addPlaylistMessage.value = '创建歌单失败，请检查服务状态'
+  } finally {
+    addPlaylistLoading.value = false
+  }
+}
+
+async function confirmAddToPlaylist() {
+  if (!addPlaylistSong.value || !selectedAddPlaylistId.value) return
+  addPlaylistLoading.value = true
+  addPlaylistMessage.value = ''
+  try {
+    await api.addSongToPlaylist(selectedAddPlaylistId.value, addPlaylistSong.value.id)
+    if (currentPlaylistId.value === selectedAddPlaylistId.value) {
+      const res = await api.playlistSongs(currentPlaylistId.value)
+      playlistSongs.value = res.data?.data || []
+    }
+    closeAddPlaylistDialog()
+  } catch (e) {
+    console.error('添加到歌单失败', e)
+    addPlaylistMessage.value = '添加失败，可能已经在歌单中或服务暂不可用'
+  } finally {
+    addPlaylistLoading.value = false
+  }
+}
+
 function normalizeDuration(duration) {
   const value = Number(duration || 0)
   if (!Number.isFinite(value)) return 0
@@ -453,6 +545,7 @@ async function handleUserSessionChanged() {
     <SongList :songs="displaySongs" :currentSong="currentSong"
               :dragMode="dragMode && activeTab === 'playlists'"
               @play="playSong" @addToQueue="addToQueue"
+              @addToPlaylist="openAddToPlaylist"
               @favorite="toggleFavorite" @reorder="onReorder" />
 
     <!-- 播放队列 -->
@@ -462,6 +555,42 @@ async function handleUserSessionChanged() {
     </div>
 
     <!-- 导入对话框 -->
+    <div v-if="addPlaylistVisible" class="dialog-mask" @click.self="closeAddPlaylistDialog">
+      <div class="playlist-dialog">
+        <div class="dialog-head">
+          <div>
+            <div class="dialog-title">添加到歌单</div>
+            <div class="dialog-subtitle">{{ addPlaylistSong?.title || '' }}</div>
+          </div>
+          <button class="dialog-close" @click="closeAddPlaylistDialog">✕</button>
+        </div>
+
+        <div v-if="addPlaylistLoading && playlistOptions.length === 0" class="dialog-empty">正在加载歌单...</div>
+        <div v-else-if="playlistOptions.length === 0" class="dialog-empty">还没有歌单，可以先创建一个</div>
+        <div v-else class="playlist-choice-list">
+          <label v-for="pl in playlistOptions" :key="pl.id" class="playlist-choice">
+            <input v-model="selectedAddPlaylistId" type="radio" :value="pl.id" />
+            <span class="choice-main">{{ pl.name }}</span>
+            <span class="choice-count">{{ pl.songCount || 0 }} 首</span>
+          </label>
+        </div>
+
+        <div class="quick-create">
+          <input v-model="quickPlaylistName" class="quick-input" placeholder="新建歌单名称"
+                 @keyup.enter="quickCreatePlaylist" />
+          <button class="quick-btn" :disabled="addPlaylistLoading || !quickPlaylistName.trim()"
+                  @click="quickCreatePlaylist">新建</button>
+        </div>
+        <div v-if="addPlaylistMessage" class="dialog-message">{{ addPlaylistMessage }}</div>
+
+        <div class="dialog-actions">
+          <button class="btn-cancel" @click="closeAddPlaylistDialog">取消</button>
+          <button class="btn-primary" :disabled="addPlaylistLoading || !selectedAddPlaylistId"
+                  @click="confirmAddToPlaylist">添加</button>
+        </div>
+      </div>
+    </div>
+
     <ImportDialog ref="importDialog" @imported="loadSongs" />
   </div>
 </template>
@@ -532,4 +661,57 @@ async function handleUserSessionChanged() {
 .song-artist { font-size: 11px; color: var(--color-text-muted); }
 .song-duration { font-size: 11px; color: var(--color-text-muted); flex-shrink: 0; }
 .netease-hint { text-align: center; padding: 24px; color: var(--color-text-muted); font-size: 13px; }
+
+/* 添加到歌单 */
+.dialog-mask {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex; align-items: center; justify-content: center;
+}
+.playlist-dialog {
+  width: min(360px, calc(100vw - 32px));
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-panel);
+  padding: 14px;
+}
+.dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.dialog-title { font-size: 14px; font-weight: 600; color: var(--color-text); }
+.dialog-subtitle {
+  max-width: 260px; margin-top: 3px;
+  font-size: 12px; color: var(--color-text-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dialog-close {
+  border: none; background: transparent; color: var(--color-text-muted);
+  cursor: pointer; font-size: 14px; padding: 2px 4px;
+}
+.playlist-choice-list { max-height: 190px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.playlist-choice {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 8px; border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm); cursor: pointer;
+}
+.playlist-choice:hover { border-color: var(--color-primary); background: var(--color-surface-hover); }
+.choice-main { flex: 1; min-width: 0; font-size: 13px; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.choice-count { font-size: 11px; color: var(--color-text-muted); }
+.dialog-empty { padding: 18px 8px; text-align: center; font-size: 12px; color: var(--color-text-muted); }
+.quick-create { display: flex; gap: 8px; margin-top: 12px; }
+.quick-input {
+  flex: 1; min-width: 0; padding: 7px 9px;
+  border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+  background: var(--color-bg); color: var(--color-text); font-size: 12px; outline: none;
+}
+.quick-input:focus { border-color: var(--color-primary); }
+.quick-btn, .btn-primary, .btn-cancel {
+  border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+  padding: 7px 12px; font-size: 12px; cursor: pointer;
+}
+.quick-btn { background: var(--color-surface-hover); color: var(--color-text); }
+.quick-btn:disabled, .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+.dialog-message { margin-top: 8px; font-size: 12px; color: var(--color-text-muted); }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.btn-cancel { background: transparent; color: var(--color-text-muted); }
+.btn-primary { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
 </style>

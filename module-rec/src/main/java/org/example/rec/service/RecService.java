@@ -15,6 +15,9 @@ public interface RecService extends IService<DailyRecommend> {
     /** 今日推荐 — 根据用户偏好 */
     List<Map<String, Object>> getDailyRecommend(Integer userId);
 
+    /** 手动刷新今日推荐 — 根据最新行为重新生成 */
+    List<Map<String, Object>> refreshDailyRecommend(Integer userId);
+
     /** 相似歌曲推荐 — 同流派/同歌手 */
     List<Map<String, Object>> getSimilarSongs(Integer songId);
 

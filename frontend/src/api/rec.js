@@ -5,6 +5,7 @@ import { getCurrentUserId } from './user'
 export const recApi = {
   hello: () => api.get('/rec/hello'),
   daily: (userId) => api.get('/rec/daily', { params: { userId: userId || getCurrentUserId() } }),
+  refreshDaily: (userId) => api.post('/rec/daily/refresh', null, { params: { userId: userId || getCurrentUserId() } }),
   hot: () => api.get('/rec/hot'),
   similar: (songId) => api.get('/rec/similar', { params: { songId } }),
   preferences: (userId) => api.get('/rec/preferences', { params: { userId: userId || getCurrentUserId() } }),
