@@ -8,7 +8,8 @@
 统一响应并未完全一致：
 
 - `module-music` 使用 `Result<T>`：`{ "code": 200, "msg": "success", "data": ... }`；
-- `module-chat`、`module-rec`、`module-user` 多数接口直接返回对象、数组或字符串；
+- `module-chat`、`module-rec` 多数接口直接返回对象、数组或字符串；
+- `module-user` 使用 `{ "code": 200, "message": "success", "data": ... }`；
 - 文档下方按真实代码分别说明。
 
 ## 1. Gateway
@@ -294,13 +295,56 @@
 
 ## 5. module-user
 
-当前真实后端只实现：
+`module-user` 成功响应一般为：
+
+```json
+{ "code": 200, "message": "success", "data": {} }
+```
 
 | 方法 | 路径 | 说明 |
 |:--|:--|:--|
 | `GET` | `/user/hello` | 健康检查 |
+| `POST` | `/user/register` | 注册用户 |
+| `POST` | `/user/login` | 登录并返回 token |
+| `GET` | `/user/info` | 查询当前用户，需要 `Authorization: Bearer <token>` |
+| `PUT` | `/user/info` | 更新当前用户资料，需要 token |
+| `GET` | `/user/favorite/list` | 查询当前用户收藏，内部调用 music |
+| `POST` | `/user/favorite/{songId}` | 添加收藏，内部调用 music |
+| `POST` | `/user/favorite/add?songId=1` | 添加收藏兼容接口 |
+| `DELETE` | `/user/favorite/{songId}` | 取消收藏，内部调用 music |
+| `GET` | `/user/history` | 查询当前用户播放历史，内部调用 music |
+| `POST` | `/user/history` | 记录播放历史，body: `{ "songId": 10 }` |
+| `POST` | `/user/history/add?songId=10` | 记录播放历史兼容接口 |
 
-`frontend/src/api/user.js` 预留了 `/user/register`、`/user/login`、`/user/info`、`/user/favorite/*`、`/user/history`，但后端尚未实现，不能在文档里标为已完成。
+注册请求：
+
+```json
+{
+  "username": "demo_user",
+  "password": "test123456",
+  "nickname": "Demo",
+  "phone": "13800000000",
+  "email": "demo@example.com"
+}
+```
+
+登录响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "token": "JWT...",
+    "userId": 1,
+    "username": "demo_user",
+    "nickname": "Demo",
+    "avatar": ""
+  }
+}
+```
+
+说明：`module-user` 只保存用户身份资料；收藏和播放历史复用 `module-music` 的 `user_favorite`、`play_history`，避免两套数据冲突。
 
 ## 6. 前端跨组件事件
 

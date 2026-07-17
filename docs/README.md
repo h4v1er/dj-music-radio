@@ -2,7 +2,7 @@
 
 仓库：`git@github.com:h4v1er/dj-music-radio.git`
 当前集成分支：`dev-chat`
-当前基准：已完成 `feat(chat): 扩展天气详情与时间工具`，并已整合 `music`、`rec` 模块阶段性最新实现。`user` 模块仍处于基础占位状态，后续整合完成后需要再复核一轮。
+当前基准：已完成 `feat(user): 整合用户中心登录与会话联动`，并已整合 `music`、`rec`、`user` 模块阶段性最新实现。
 
 ## 先读哪几份
 
@@ -21,7 +21,7 @@
 | `module-chat` | [module-chat-runtime.md](./module-chat-runtime.md) | 已接 DeepSeek 工具规划、WebSocket、天气、时间、浏览器定位、music/rec 联动 |
 | `module-music` | [module-music-runtime.md](./module-music-runtime.md) | 已接本地歌库、网易云代理、歌单导入、歌词、情绪分析、收藏/历史 |
 | `module-rec` | [module-rec-runtime.md](./module-rec-runtime.md) | 已接 Redis 热榜、每日推荐、相似推荐、行为采集、RabbitMQ 通知 |
-| `module-user` | [module-user-runtime.md](./module-user-runtime.md) | 当前只有 `/user/hello`，登录注册/JWT 等仍待队员 D 完成 |
+| `module-user` | [module-user-runtime.md](./module-user-runtime.md) | 已接注册、登录、JWT、用户资料，收藏/历史通过 music 模块联动 |
 | `frontend` | [../frontend/README.md](../frontend/README.md) | 单屏 DJ 控制台，三栏布局，聊天推荐可点击播放 |
 
 ## 当前真实服务清单
@@ -32,7 +32,7 @@
 | module-chat | 8081 | AI 对话、WebSocket、天气、历史 |
 | module-music | 8082 | 音乐中心、网易云代理转发、歌单、情绪分析 |
 | module-rec | 8083 | 热门榜、每日推荐、相似推荐、偏好标签 |
-| module-user | 8084 | 当前健康检查占位 |
+| module-user | 8084 | 用户注册登录、JWT、用户资料、收藏/历史入口 |
 | Frontend | 5173 | Vite + Vue3 单页控制台 |
 | NeteaseCloudMusicApi | 3000 | 外部 Node 服务，本仓库脚本安装到 `.runtime/` |
 | Nacos | 8848 | 服务发现 |
@@ -50,7 +50,7 @@ dj-music-radio/
 ├── module-chat/            队员A：智能对话 DJ
 ├── module-music/           队员B：音乐中心
 ├── module-rec/             队员C：每日推荐
-├── module-user/            队员D：用户中心占位
+├── module-user/            队员D：用户中心
 ├── frontend/               Vue3 + Vite 前端
 ├── scripts/netease/        网易云 API 代理启动脚本
 ├── docs/                   项目文档

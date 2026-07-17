@@ -1,68 +1,119 @@
 # module-user 运行与实现说明
 
-负责范围：队员 D 用户中心。本文档只描述当前真实代码，不把预留接口写成已完成。
+负责范围：队员 D 用户中心、JWT 会话、用户资料，以及收藏/历史的用户入口。
 
 ## 1. 当前能力
 
-当前后端只实现：
+- `GET /user/hello` 健康检查；
+- `POST /user/register` 用户注册；
+- `POST /user/login` 用户登录并返回 JWT；
+- `GET /user/info` 根据 Authorization token 查询当前用户；
+- `PUT /user/info` 更新当前用户昵称、头像、手机号、邮箱等资料；
+- `GET /user/favorite/list` 查询当前用户收藏歌曲；
+- `POST /user/favorite/{songId}` / `POST /user/favorite/add?songId=` 添加收藏；
+- `DELETE /user/favorite/{songId}` 取消收藏；
+- `GET /user/history` 查询当前用户播放历史；
+- `POST /user/history` / `POST /user/history/add?songId=` 记录播放历史。
+
+## 2. 实现边界
+
+用户身份数据由 `module-user` 管理：
 
 ```text
-GET /user/hello
+mall.dj_user
 ```
 
-返回健康检查字符串。
+收藏和播放历史不在 user 模块重复建表，统一复用 `module-music` 已有数据：
 
-## 2. 已有但未完成的部分
+```text
+dj_music_radio.user_favorite
+dj_music_radio.play_history
+```
 
-| 位置 | 当前状态 |
+`module-user` 通过 OpenFeign 调用 `module-music`，在校验 JWT 后把当前 `userId` 传给 music 模块。这样可以避免 user 和 music 各自维护一套收藏/历史数据。
+
+## 3. 环境变量
+
+| 变量 | 必填 | 说明 |
+|:--|:--:|:--|
+| `MYSQL_PASSWORD` | 是 | 连接 MySQL `mall` |
+| `JWT_SECRET` | 否 | JWT HMAC 密钥，至少 32 字节；未配置时使用开发默认值 |
+| `JWT_EXPIRE_MS` | 否 | token 过期时间，默认 86400000 |
+
+## 4. 数据库初始化
+
+在 `mall` 库执行：
+
+```text
+module-user/src/main/resources/sql/user_tables.sql
+```
+
+当前脚本创建：
+
+```text
+dj_user
+```
+
+密码保存为 BCrypt hash，不保存明文密码。
+
+## 5. 依赖服务
+
+| 依赖 | 用途 |
 |:--|:--|
-| `module-user/src/main/java/org/example/user/UserApplication.java` | Spring Boot 启动类 |
-| `module-user/src/main/java/org/example/user/controller/UserController.java` | 只有 `/user/hello` |
-| `module-user/src/main/resources/application.yml` | 配置了端口、Nacos、MySQL、Redis、MyBatis Plus |
-| `frontend/src/components/UserBar.vue` | 有登录弹窗和状态栏 UI，但只是本地状态 |
-| `frontend/src/api/user.js` | 预留 register/login/info/favorite/history API |
-
-## 3. 不能误认为已完成的能力
-
-当前没有：
-
-- 注册；
-- 登录；
-- JWT；
-- token 校验；
-- 用户资料接口；
-- 后端收藏接口；
-- 后端播放历史接口；
-- Gateway 鉴权过滤器。
-
-music 模块已经有收藏和播放历史接口。user 模块后续实现时，需要和 music 的 `user_favorite`、`play_history` 做边界统一，避免出现两套收藏/历史数据。
-
-## 4. 运行依赖
-
-| 依赖 | 当前用途 |
-|:--|:--|
-| MySQL `mall` | 已配置，当前代码未实际建用户业务表 |
-| Redis | 已配置，当前代码未实际使用 |
+| MySQL `mall` | 用户表 |
 | Nacos | 服务注册发现 |
+| module-music | 收藏和播放历史 |
+| MySQL `dj_music_radio` | music 模块收藏/历史数据 |
 
-环境变量：
+Redis 当前已在配置中保留，但本阶段还没有验证码或 session 存储逻辑。
+
+## 6. 验证命令
+
+注册：
 
 ```powershell
-[Environment]::SetEnvironmentVariable("MYSQL_PASSWORD", "你的MySQL密码", "User")
+Invoke-RestMethod -Method Post "http://127.0.0.1:8080/user/register" `
+  -ContentType "application/json" `
+  -Body '{"username":"demo_user","password":"test123456","nickname":"Demo"}'
 ```
 
-## 5. 验证命令
+登录：
 
 ```powershell
-Invoke-RestMethod "http://127.0.0.1:8080/user/hello"
+$login = Invoke-RestMethod -Method Post "http://127.0.0.1:8080/user/login" `
+  -ContentType "application/json" `
+  -Body '{"username":"demo_user","password":"test123456"}'
+$token = $login.data.token
 ```
 
-## 6. 后续整合建议
+查用户信息：
 
-1. 明确用户表结构和 userId 类型；
-2. 实现注册、登录、JWT 签发和校验；
-3. 前端 Axios 请求统一注入 Authorization；
-4. 改造 UserBar 使用真实用户信息；
-5. 统一收藏、播放历史归属：复用 music 接口，或迁移到 user 后让 music 调 user；
-6. 在 Gateway 增加需要登录接口的鉴权策略；
-7. 合入后再次更新所有文档和答辩说明。
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8080/user/info" `
+  -Headers @{ Authorization = "Bearer $token" }
+```
+
+查收藏和历史：
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8080/user/favorite/list" `
+  -Headers @{ Authorization = "Bearer $token" }
+Invoke-RestMethod "http://127.0.0.1:8080/user/history" `
+  -Headers @{ Authorization = "Bearer $token" }
+```
+
+## 7. 前端联动
+
+- `UserBar.vue` 负责真实登录、注册、退出、收藏和历史弹窗；
+- 登录成功后 token 和用户信息写入 `localStorage`；
+- 前端触发 `dj-user-session-changed` 事件；
+- `ChatPanel.vue`、`MusicPanel.vue`、`RecPanel.vue` 会使用当前登录用户 ID 刷新历史、收藏、推荐和偏好；
+- 收藏/历史弹窗中点击歌曲会触发 `dj-play-song`，交给 `MusicPanel.vue` 播放。
+
+## 8. 后续可增强
+
+- Gateway 统一鉴权过滤器；
+- 注册验证码或找回密码；
+- 用户头像上传；
+- 用户资料页；
+- 更细粒度的权限和 token 续期。

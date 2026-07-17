@@ -73,4 +73,4 @@ npm.cmd run build
 - 天气和聊天定位使用浏览器 `navigator.geolocation`；
 - 聊天推荐歌曲点击后触发 `dj-play-song`；
 - MusicPanel 监听 `dj-play-song` 并播放对应歌曲；
-- UserBar 当前为本地登录状态 UI，后端真实用户模块尚未完成。
+- UserBar 调用真实 user 接口完成登录/注册/退出，并通过 `dj-user-session-changed` 通知 ChatPanel、MusicPanel、RecPanel 使用当前用户 ID 刷新数据。

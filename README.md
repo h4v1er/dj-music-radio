@@ -9,7 +9,7 @@
 - 队员 A：`module-chat` 智能对话、天气、时间、定位、跨模块工具；
 - 队员 B：`module-music` 音乐中心、网易云、歌单、歌词、情绪、收藏历史；
 - 队员 C：`module-rec` 推荐、热榜、每日推荐、偏好标签；
-- 队员 D：`module-user` 当前仍是占位，只有 `/user/hello`。
+- 队员 D：`module-user` 用户中心，已接注册、登录、JWT、用户资料，并通过 music 模块联动收藏和播放历史。
 
 ## 先看文档
 
