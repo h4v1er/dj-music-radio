@@ -14,6 +14,8 @@ public class SongDTO {
     private String audioUrl;
     private Integer duration;
     private String genre;
+    private String emotionTags;
+    private Integer playCount;
 
     public Integer getId() {
         return id;
@@ -77,5 +79,21 @@ public class SongDTO {
 
     public void setGenre(String genre) {
         this.genre = genre;
+    }
+
+    public String getEmotionTags() {
+        return emotionTags;
+    }
+
+    public void setEmotionTags(String emotionTags) {
+        this.emotionTags = emotionTags;
+    }
+
+    public Integer getPlayCount() {
+        return playCount;
+    }
+
+    public void setPlayCount(Integer playCount) {
+        this.playCount = playCount;
     }
 }

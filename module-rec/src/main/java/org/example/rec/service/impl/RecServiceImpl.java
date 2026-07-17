@@ -107,7 +107,17 @@ public class RecServiceImpl extends ServiceImpl<DailyRecommendMapper, DailyRecom
             }
 
             SongDTO sourceSong = findSongById(sourceSongId);
-            if (sourceSong != null && sourceSong.getGenre() != null && !sourceSong.getGenre().isBlank()) {
+            if (sourceSong != null) {
+                appendDailyRecommendations(
+                        userId,
+                        generated,
+                        recommendedSongIds,
+                        listenedSongIds,
+                        searchByEmotionTags(sourceSongId, sourceSong.getEmotionTags())
+                );
+            }
+
+            if (generated.size() < 10 && sourceSong != null && isUsefulGenre(sourceSong.getGenre())) {
                 appendDailyRecommendations(
                         userId,
                         generated,
@@ -134,6 +144,26 @@ public class RecServiceImpl extends ServiceImpl<DailyRecommendMapper, DailyRecom
                         recommendedSongIds,
                         listenedSongIds,
                         getBehaviorBasedSimilar(sourceSongId)
+                );
+            }
+
+            if (generated.size() < 10 && sourceSong != null && sourceSong.getAlbum() != null && !sourceSong.getAlbum().isBlank()) {
+                appendDailyRecommendations(
+                        userId,
+                        generated,
+                        recommendedSongIds,
+                        listenedSongIds,
+                        searchByAlbum(sourceSongId, sourceSong.getAlbum())
+                );
+            }
+
+            if (generated.size() < 10 && sourceSong != null && sourceSong.getDuration() != null && sourceSong.getDuration() > 0) {
+                appendDailyRecommendations(
+                        userId,
+                        generated,
+                        recommendedSongIds,
+                        listenedSongIds,
+                        searchByDuration(sourceSongId, sourceSong.getDuration())
                 );
             }
 
@@ -202,21 +232,27 @@ public class RecServiceImpl extends ServiceImpl<DailyRecommendMapper, DailyRecom
             return List.of("摇滚", "电子", "流行"); // 新用户，给默认标签
         }
 
-        // 2. 通过 Feign 统计各流派出现次数
-        Map<String, Integer> genreCount = new LinkedHashMap<>();
+        // 2. 综合统计情绪标签和有效流派。当前 genre 可能只是“网易云”，情绪标签更能表达偏好。
+        Map<String, Integer> tagCount = new LinkedHashMap<>();
         for (Map<String, Object> row : topSongs) {
-            Integer songId = (Integer) row.get("song_id");
-            String genre = getSongGenre(songId);
-            if (genre != null && !genre.isBlank()) {
-                genreCount.merge(genre, 1, Integer::sum);
+            Integer songId = toInteger(row.get("song_id"));
+            SongDTO song = findSongById(songId);
+            if (song == null) {
+                continue;
+            }
+            for (String tag : splitTags(song.getEmotionTags())) {
+                tagCount.merge(tag, 2, Integer::sum);
+            }
+            if (isUsefulGenre(song.getGenre())) {
+                tagCount.merge(song.getGenre(), 1, Integer::sum);
             }
         }
 
         // 3. 按频次排序，取前 5 个
-        if (genreCount.isEmpty()) {
+        if (tagCount.isEmpty()) {
             return List.of("摇滚", "电子", "流行");
         }
-        return genreCount.entrySet().stream()
+        return tagCount.entrySet().stream()
                 .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
                 .limit(5)
                 .map(Map.Entry::getKey)
@@ -236,39 +272,52 @@ public class RecServiceImpl extends ServiceImpl<DailyRecommendMapper, DailyRecom
         return behaviorMapper.selectMaps(wrapper);
     }
 
-    /** 通过 Feign 获取歌曲流派 */
-    private String getSongGenre(Integer songId) {
-        SongDTO song = findSongById(songId);
-        return song == null ? null : song.getGenre();
-    }
-
     // ============ 相似歌曲 ============
     @Override
     public List<Map<String, Object>> getSimilarSongs(Integer songId) {
 
-        // 第一步: 尝试通过 Feign 从音乐服务获取歌曲流派和歌手信息
-        String genre = null;
-        String artist = null;
+        // 第一步: 尝试通过音乐服务获取歌曲画像信息
         SongDTO sourceSong = findSongById(songId);
-        if (sourceSong != null) {
-            genre = sourceSong.getGenre();
-            artist = sourceSong.getArtist();
+        if (sourceSong == null) {
+            return getBehaviorBasedSimilar(songId);
         }
 
-        // 第二步: 优先按流派搜索同风格歌曲
-        if (genre != null && !genre.isBlank()) {
-            List<Map<String, Object>> songs = searchByGenre(songId, genre);
-            if (!songs.isEmpty()) return songs;
-        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        Set<Integer> seen = new LinkedHashSet<>();
+        seen.add(songId);
 
-        // 第三步: 流派不够，按歌手搜索
-        if (artist != null && !artist.isBlank()) {
-            List<Map<String, Object>> songs = searchByArtist(songId, artist);
-            if (!songs.isEmpty()) return songs;
+        appendSimilar(result, seen, searchByEmotionTags(songId, sourceSong.getEmotionTags()));
+        if (result.size() < 10 && isUsefulGenre(sourceSong.getGenre())) {
+            appendSimilar(result, seen, searchByGenre(songId, sourceSong.getGenre()));
         }
+        if (result.size() < 10 && sourceSong.getArtist() != null && !sourceSong.getArtist().isBlank()) {
+            appendSimilar(result, seen, searchByArtist(songId, sourceSong.getArtist()));
+        }
+        if (result.size() < 10 && sourceSong.getAlbum() != null && !sourceSong.getAlbum().isBlank()) {
+            appendSimilar(result, seen, searchByAlbum(songId, sourceSong.getAlbum()));
+        }
+        if (result.size() < 10) {
+            appendSimilar(result, seen, getBehaviorBasedSimilar(songId));
+        }
+        if (result.size() < 10 && sourceSong.getDuration() != null && sourceSong.getDuration() > 0) {
+            appendSimilar(result, seen, searchByDuration(songId, sourceSong.getDuration()));
+        }
+        return result;
+    }
 
-        // 第四步: 回退 — 基于用户行为的协同过滤
-        return getBehaviorBasedSimilar(songId);
+    private void appendSimilar(List<Map<String, Object>> target,
+                               Set<Integer> seen,
+                               List<Map<String, Object>> candidates) {
+        for (Map<String, Object> candidate : candidates) {
+            Integer songId = toInteger(candidate.get("songId"));
+            if (songId == null || !seen.add(songId)) {
+                continue;
+            }
+            target.add(candidate);
+            if (target.size() >= 10) {
+                return;
+            }
+        }
     }
 
     /** 按流派搜索同风格歌曲 */
@@ -313,6 +362,72 @@ public class RecServiceImpl extends ServiceImpl<DailyRecommendMapper, DailyRecom
             }
         } catch (Exception ignored) { }
         return Collections.emptyList();
+    }
+
+    /** 按情绪标签搜索相近歌曲 */
+    private List<Map<String, Object>> searchByEmotionTags(Integer songId, String emotionTags) {
+        List<String> tags = splitTags(emotionTags);
+        if (tags.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return findAllSongs().stream()
+                .filter(s -> !Objects.equals(s.getId(), songId))
+                .map(s -> {
+                    int score = tagOverlap(tags, splitTags(s.getEmotionTags()));
+                    if (score <= 0) {
+                        return null;
+                    }
+                    Map<String, Object> item = basicSongItem(s);
+                    item.put("score", score);
+                    item.put("reason", "同情绪 · " + firstSharedTag(tags, splitTags(s.getEmotionTags())));
+                    return item;
+                })
+                .filter(Objects::nonNull)
+                .sorted((a, b) -> {
+                    int scoreCompare = Integer.compare(toInteger(b.get("score")), toInteger(a.get("score")));
+                    if (scoreCompare != 0) return scoreCompare;
+                    return Integer.compare(toInteger(b.get("playCount")), toInteger(a.get("playCount")));
+                })
+                .limit(10)
+                .collect(Collectors.toList());
+    }
+
+    /** 按专辑搜索同一作品集内的歌曲 */
+    private List<Map<String, Object>> searchByAlbum(Integer songId, String album) {
+        if (album == null || album.isBlank()) {
+            return Collections.emptyList();
+        }
+        return findAllSongs().stream()
+                .filter(s -> !Objects.equals(s.getId(), songId))
+                .filter(s -> album.equalsIgnoreCase(stringValue(s.getAlbum())))
+                .sorted(Comparator.comparing(SongDTO::getPlayCount, Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(10)
+                .map(s -> {
+                    Map<String, Object> item = basicSongItem(s);
+                    item.put("reason", "同专辑 · " + album);
+                    return item;
+                })
+                .collect(Collectors.toList());
+    }
+
+    /** 按时长接近度补充歌曲，避免数据稀疏时推荐为空 */
+    private List<Map<String, Object>> searchByDuration(Integer songId, Integer duration) {
+        if (duration == null || duration <= 0) {
+            return Collections.emptyList();
+        }
+        return findAllSongs().stream()
+                .filter(s -> !Objects.equals(s.getId(), songId))
+                .filter(s -> s.getDuration() != null && s.getDuration() > 0)
+                .sorted(Comparator
+                        .comparingInt((SongDTO s) -> Math.abs(s.getDuration() - duration))
+                        .thenComparing(SongDTO::getPlayCount, Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(10)
+                .map(s -> {
+                    Map<String, Object> item = basicSongItem(s);
+                    item.put("reason", "相近时长");
+                    return item;
+                })
+                .collect(Collectors.toList());
     }
 
     /** 回退方案: 基于用户行为的协同过滤 — 和你有相似口味的人还喜欢… */
@@ -411,6 +526,78 @@ public class RecServiceImpl extends ServiceImpl<DailyRecommendMapper, DailyRecom
         return Collections.emptyList();
     }
 
+    private List<SongDTO> findAllSongs() {
+        try {
+            Map<?, ?> response = restTemplate.getForObject(
+                    "http://127.0.0.1:8082/music/song/list?page=1&size=300",
+                    Map.class
+            );
+            Object data = response == null ? null : response.get("data");
+            if (data instanceof Map<?, ?> page) {
+                Object records = page.get("records");
+                if (records instanceof List<?> list) {
+                    return list.stream()
+                            .filter(Map.class::isInstance)
+                            .map(item -> toSongDTO((Map<?, ?>) item))
+                            .toList();
+                }
+            }
+        } catch (Exception ignored) { }
+        return Collections.emptyList();
+    }
+
+    private Map<String, Object> basicSongItem(SongDTO song) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("songId", song.getId());
+        item.put("title", song.getTitle());
+        item.put("artist", song.getArtist());
+        item.put("playCount", song.getPlayCount() == null ? 0 : song.getPlayCount());
+        return item;
+    }
+
+    private List<String> splitTags(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return Collections.emptyList();
+        }
+        return Arrays.stream(raw.split("[,，|/、\\s]+"))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .distinct()
+                .toList();
+    }
+
+    private int tagOverlap(List<String> sourceTags, List<String> candidateTags) {
+        if (sourceTags.isEmpty() || candidateTags.isEmpty()) {
+            return 0;
+        }
+        Set<String> candidateSet = new HashSet<>(candidateTags);
+        int count = 0;
+        for (String tag : sourceTags) {
+            if (candidateSet.contains(tag)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private String firstSharedTag(List<String> sourceTags, List<String> candidateTags) {
+        Set<String> candidateSet = new HashSet<>(candidateTags);
+        for (String tag : sourceTags) {
+            if (candidateSet.contains(tag)) {
+                return tag;
+            }
+        }
+        return sourceTags.isEmpty() ? "相近" : sourceTags.get(0);
+    }
+
+    private boolean isUsefulGenre(String genre) {
+        if (genre == null || genre.isBlank()) {
+            return false;
+        }
+        String value = genre.trim();
+        return !"网易云".equals(value) && !"NETEASE".equalsIgnoreCase(value);
+    }
+
     private SongDTO toSongDTO(Map<?, ?> map) {
         SongDTO dto = new SongDTO();
         dto.setId(toInteger(map.get("id")));
@@ -420,6 +607,8 @@ public class RecServiceImpl extends ServiceImpl<DailyRecommendMapper, DailyRecom
         dto.setCoverUrl(stringValue(map.get("coverUrl")));
         dto.setGenre(stringValue(map.get("genre")));
         dto.setDuration(toInteger(map.get("duration")));
+        dto.setEmotionTags(stringValue(map.get("emotionTags")));
+        dto.setPlayCount(toInteger(map.get("playCount")));
         return dto;
     }
 
