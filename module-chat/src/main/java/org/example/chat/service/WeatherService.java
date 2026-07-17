@@ -1,13 +1,19 @@
 package org.example.chat.service;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.GZIPInputStream;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
@@ -42,14 +48,17 @@ public class WeatherService {
     private final String apiKey;
     private final String weatherUrl;
     private final String geoUrl;
+    private final ObjectMapper objectMapper;
 
     public WeatherService(
             RestClient.Builder restClientBuilder,
+            ObjectMapper objectMapper,
             @Value("${weather.api-key:}") String apiKey,
             @Value("${weather.api-host:}") String apiHost,
             @Value("${weather.weather-url}") String weatherUrl,
             @Value("${weather.geo-url}") String geoUrl) {
         this.restClient = restClientBuilder.build();
+        this.objectMapper = objectMapper;
         this.apiKey = apiKey;
         this.weatherUrl = resolveUrl(apiHost, weatherUrl, "/v7/weather/now");
         this.geoUrl = resolveUrl(apiHost, geoUrl, "/geo/v2/city/lookup");
@@ -62,11 +71,7 @@ public class WeatherService {
         }
 
         try {
-            GeoResponse geo = restClient.get()
-                    .uri(geoUri(safeCity))
-                    .header("X-QW-Api-Key", apiKey)
-                    .retrieve()
-                    .body(GeoResponse.class);
+            GeoResponse geo = getJson(geoUri(safeCity), GeoResponse.class);
             if (geo == null) {
                 return demoWeather(safeCity, "城市查询接口无响应，当前使用演示天气");
             }
@@ -78,11 +83,7 @@ public class WeatherService {
             }
 
             GeoLocation location = geo.location().get(0);
-            WeatherNowResponse nowResponse = restClient.get()
-                    .uri(weatherUri(location.id()))
-                    .header("X-QW-Api-Key", apiKey)
-                    .retrieve()
-                    .body(WeatherNowResponse.class);
+            WeatherNowResponse nowResponse = getJson(weatherUri(location.id()), WeatherNowResponse.class);
 
             if (nowResponse == null) {
                 return demoWeather(safeCity, "实时天气接口无响应，当前使用演示天气");
@@ -113,6 +114,30 @@ public class WeatherService {
 
     private boolean hasApiKey() {
         return StringUtils.hasText(apiKey) && !"your_api_key_here".equals(apiKey);
+    }
+
+    private <T> T getJson(URI uri, Class<T> responseType) throws IOException {
+        byte[] body = restClient.get()
+                .uri(uri)
+                .header("X-QW-Api-Key", apiKey)
+                .header(HttpHeaders.ACCEPT_ENCODING, "gzip, identity")
+                .retrieve()
+                .body(byte[].class);
+        if (body == null || body.length == 0) {
+            return null;
+        }
+        byte[] jsonBytes = isGzip(body) ? unzip(body) : body;
+        return objectMapper.readValue(new String(jsonBytes, StandardCharsets.UTF_8), responseType);
+    }
+
+    private static boolean isGzip(byte[] body) {
+        return body.length >= 2 && (body[0] & 0xff) == 0x1f && (body[1] & 0xff) == 0x8b;
+    }
+
+    private static byte[] unzip(byte[] body) throws IOException {
+        try (GZIPInputStream gzip = new GZIPInputStream(new ByteArrayInputStream(body))) {
+            return gzip.readAllBytes();
+        }
     }
 
     private static String resolveUrl(String apiHost, String fallbackUrl, String path) {
