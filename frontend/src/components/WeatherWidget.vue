@@ -9,6 +9,7 @@ import { Loading, Refresh, WarningFilled } from '@element-plus/icons-vue'
 import { chatApi } from '../api/chat'
 
 const DEFAULT_CITY = '北京'
+const GEOLOCATION_TIMEOUT = 5000
 
 const weather = ref({
   icon: '☀️',
@@ -22,6 +23,7 @@ const weather = ref({
 const greeting = ref('下午好，想听点什么？')
 const loading = ref(false)
 const failed = ref(false)
+const locationSource = ref('default')
 
 onMounted(() => {
   loadWeather()
@@ -31,7 +33,8 @@ async function loadWeather() {
   loading.value = true
   failed.value = false
   try {
-    const res = await chatApi.weather(DEFAULT_CITY)
+    const location = await resolveWeatherLocation()
+    const res = await chatApi.weather(location.value)
     weather.value = {
       icon: res.data.icon || '🌡️',
       temp: res.data.temp || '--°',
@@ -39,8 +42,9 @@ async function loadWeather() {
       text: res.data.text || '未知',
       source: res.data.source || 'demo',
       obsTime: res.data.obsTime || '',
-      message: res.data.message || ''
+      message: sourceMessage(location.source, res.data.message)
     }
+    locationSource.value = location.source
     greeting.value = res.data.greeting || '想听点什么？'
   } catch (e) {
     failed.value = true
@@ -48,6 +52,41 @@ async function loadWeather() {
   } finally {
     loading.value = false
   }
+}
+
+async function resolveWeatherLocation() {
+  try {
+    const position = await currentPosition()
+    const { latitude, longitude } = position.coords
+    return {
+      value: `${longitude.toFixed(4)},${latitude.toFixed(4)}`,
+      source: 'geolocation'
+    }
+  } catch (e) {
+    return {
+      value: DEFAULT_CITY,
+      source: 'default'
+    }
+  }
+}
+
+function currentPosition() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('geolocation unsupported'))
+      return
+    }
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: false,
+      timeout: GEOLOCATION_TIMEOUT,
+      maximumAge: 10 * 60 * 1000
+    })
+  })
+}
+
+function sourceMessage(source, message) {
+  const prefix = source === 'geolocation' ? '浏览器定位城市' : '默认城市'
+  return message ? `${prefix}；${message}` : prefix
 }
 </script>
 
@@ -67,6 +106,7 @@ async function loadWeather() {
       <em :class="{ real: weather.source === 'real' }">
         {{ weather.source === 'real' ? '实时' : '演示数据' }}
       </em>
+      <em v-if="locationSource === 'geolocation'" class="location">定位</em>
     </span>
     <button class="refresh-btn" :disabled="loading" title="刷新天气" @click="loadWeather">
       <el-icon><Refresh /></el-icon>
@@ -113,6 +153,10 @@ async function loadWeather() {
 
 .info em.real {
   color: var(--color-accent);
+}
+
+.info em.location {
+  color: var(--color-text-muted);
 }
 
 .refresh-btn {
