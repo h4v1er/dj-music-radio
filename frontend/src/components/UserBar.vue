@@ -248,8 +248,10 @@ function playSong(song) {
       <el-button v-if="!loggedIn" size="small" type="primary" plain class="login-btn" @click="showLogin = true">登录 / 注册</el-button>
       <el-dropdown v-else trigger="hover" placement="top-end" popper-class="user-account-popper" @command="handleUserCommand">
         <el-button size="small" plain class="account-menu-btn">
-          <span class="account-dot"></span>
-          账户操作
+          <span class="account-menu-content">
+            <span class="account-dot"></span>
+            <span>账户操作</span>
+          </span>
         </el-button>
         <template #dropdown>
           <el-dropdown-menu>
@@ -365,13 +367,18 @@ function playSong(song) {
 }
 .account-menu-btn {
   min-width: 98px;
+}
+.account-menu-content {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 8px;
+  line-height: 1;
 }
 .account-dot {
   width: 6px;
   height: 6px;
+  flex: 0 0 6px;
   border-radius: 50%;
   background: var(--color-success);
 }

@@ -81,9 +81,12 @@ const chatExpanded = ref(false)
   padding: var(--gap-sm);
   overflow: hidden;
   min-height: 0;
+  transition: grid-template-columns 0.32s ease;
 }
 
-.side-panels { display: contents; }
+.side-panels {
+  display: contents;
+}
 
 .main-area.chat-expanded {
   grid-template-columns: minmax(0, 1fr) 360px;
@@ -95,12 +98,35 @@ const chatExpanded = ref(false)
   gap: var(--gap-sm);
   min-height: 0;
   overflow: hidden;
+  animation: sidePanelsSlideIn 0.28s ease both;
 }
 
 .main-area.chat-expanded :deep(.music-panel),
 .main-area.chat-expanded :deep(.rec-panel) {
   max-height: none;
   min-height: 0;
+  transition: transform 0.28s ease, opacity 0.28s ease;
+}
+
+.main-area :deep(.chat-panel),
+.main-area :deep(.music-panel),
+.main-area :deep(.rec-panel) {
+  transition: transform 0.28s ease, opacity 0.28s ease, box-shadow 0.28s ease;
+}
+
+.main-area.chat-expanded :deep(.chat-panel) {
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.24);
+}
+
+@keyframes sidePanelsSlideIn {
+  from {
+    opacity: 0.72;
+    transform: translateX(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 /* ---- 响应式：小屏时堆叠 ---- */

@@ -356,7 +356,7 @@ async function scrollToBottom() {
 </script>
 
 <template>
-  <div class="panel chat-panel">
+  <div class="panel chat-panel" :class="{ expanded }">
     <div class="chat-header">
       <div class="title-group">
         <span class="dot" :style="{ background: connected ? 'var(--color-success)' : '#666' }"></span>
@@ -430,6 +430,11 @@ async function scrollToBottom() {
   overflow: hidden;
   gap: 14px;
   padding: 18px;
+  transition: padding 0.28s ease, box-shadow 0.28s ease;
+}
+
+.chat-panel.expanded {
+  padding: 20px;
 }
 
 .chat-header {

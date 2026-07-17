@@ -179,7 +179,9 @@ onMounted(async () => {
           <div class="song-title">{{ song.title }}</div>
           <div class="song-artist">{{ song.artist }} · {{ song.album || song.genre }}</div>
         </div>
-        <EmotionTag v-if="song.emotionTags" :emotion="song.emotionTags.split(',')[0]" size="sm" />
+        <span class="song-emotion-cell">
+          <EmotionTag v-if="song.emotionTags" :emotion="song.emotionTags.split(',')[0]" size="sm" />
+        </span>
         <span class="song-duration">{{ fmtDuration(song.duration) }}</span>
         <button class="fav-btn" :class="{ faved: song._favorited }"
                 title="收藏" @click.stop="favoriteFromList(song)">❤</button>
@@ -234,15 +236,18 @@ onMounted(async () => {
   text-align: center; padding: 24px; font-size: 13px; color: var(--color-text-muted);
 }
 .song-item {
-  display: flex; align-items: center; gap: 8px;
+  display: grid;
+  grid-template-columns: 24px 36px minmax(0, 1fr) 70px 46px 28px;
+  align-items: center;
+  gap: 8px;
   padding: 6px 8px; border-radius: var(--radius-sm); cursor: pointer;
   transition: background 0.15s; font-size: 12px;
 }
 .song-item:hover { background: var(--color-surface-hover); }
 .song-item.active { background: rgba(233, 69, 96, 0.1); border-left: 2px solid var(--color-primary); }
 .song-item.drag-mode { cursor: grab; }
-.song-num { width: 20px; color: var(--color-text-muted); text-align: center; flex-shrink: 0; }
-.song-cover { font-size: 18px; flex-shrink: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
+.song-num { color: var(--color-text-muted); text-align: center; }
+.song-cover { font-size: 18px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
 .cover-thumb {
   width: 32px; height: 32px; border-radius: 4px; object-fit: cover;
 }
@@ -255,12 +260,35 @@ onMounted(async () => {
   font-size: 11px; color: var(--color-text-muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.song-duration { font-size: 11px; color: var(--color-text-muted); flex-shrink: 0; }
+.song-emotion-cell {
+  width: 70px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.song-duration {
+  width: 46px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .fav-btn {
   background: none; border: none; font-size: 13px; cursor: pointer;
   opacity: 0.3; transition: opacity 0.15s; padding: 2px;
 }
 .fav-btn:hover, .fav-btn.faved { opacity: 1; }
+
+@media (max-width: 520px) {
+  .song-item {
+    grid-template-columns: 22px 34px minmax(0, 1fr) 42px 24px;
+  }
+
+  .song-emotion-cell {
+    display: none;
+  }
+}
 
 /* 右键菜单 */
 .context-menu {

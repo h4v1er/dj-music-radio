@@ -238,46 +238,48 @@ onUnmounted(() => {
     </div>
 
     <Teleport to="body">
-      <div v-if="showFocusPlayer" class="focus-player" @click.self="closeFocusPlayer">
-        <div class="focus-shell">
-          <button class="focus-close" title="关闭播放详情" @click="closeFocusPlayer">✕</button>
-          <div class="focus-cover-wrap">
-            <img v-if="coverUrl && !coverError" :src="coverUrl" class="focus-cover"
-                 referrerpolicy="no-referrer" />
-            <span v-else class="focus-cover-fallback">{{ coverEmoji }}</span>
-          </div>
-          <div class="focus-info">
-            <div class="focus-title">{{ currentSong?.title || '未选择歌曲' }}</div>
-            <div class="focus-artist">{{ currentSong?.artist || '—' }}</div>
-            <div v-if="currentSong?.album" class="focus-album">{{ currentSong.album }}</div>
-          </div>
-          <div class="focus-progress">
-            <span class="time">{{ formattedCurrent }}</span>
-            <div class="progress-bar" @click="seekTo">
-              <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
-              <div class="progress-thumb" :style="{ left: progressPercent + '%' }"></div>
+      <Transition name="focus-player-motion">
+        <div v-if="showFocusPlayer" class="focus-player" @click.self="closeFocusPlayer">
+          <div class="focus-shell">
+            <button class="focus-close" title="关闭播放详情" @click="closeFocusPlayer">✕</button>
+            <div class="focus-cover-wrap">
+              <img v-if="coverUrl && !coverError" :src="coverUrl" class="focus-cover"
+                   referrerpolicy="no-referrer" />
+              <span v-else class="focus-cover-fallback">{{ coverEmoji }}</span>
             </div>
-            <span class="time">{{ formattedDuration }}</span>
-          </div>
-          <div class="controls focus-controls">
-            <button class="ctrl-btn mode-btn control-side control-side-left" :title="modeLabel" @click="cycleMode">{{ modeIcon }}</button>
-            <div class="transport-controls">
-              <button class="ctrl-btn" title="上一首" @click="emit('prev')">⏮</button>
-              <button class="ctrl-btn play-btn" :class="{ active: isPlaying }" @click="togglePlay">
-                {{ isPlaying ? '⏸' : '▶' }}
-              </button>
-              <button class="ctrl-btn" title="下一首" @click="emit('next')">⏭</button>
+            <div class="focus-info">
+              <div class="focus-title">{{ currentSong?.title || '未选择歌曲' }}</div>
+              <div class="focus-artist">{{ currentSong?.artist || '—' }}</div>
+              <div v-if="currentSong?.album" class="focus-album">{{ currentSong.album }}</div>
             </div>
-            <div class="volume-group control-side control-side-right">
-              <button class="ctrl-btn volume-icon" @click="toggleMute">
-                {{ isMuted || volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊' }}
-              </button>
-              <input type="range" class="volume-slider" min="0" max="1" step="0.05"
-                     :value="volume" @input="changeVolume" />
+            <div class="focus-progress">
+              <span class="time">{{ formattedCurrent }}</span>
+              <div class="progress-bar" @click="seekTo">
+                <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
+                <div class="progress-thumb" :style="{ left: progressPercent + '%' }"></div>
+              </div>
+              <span class="time">{{ formattedDuration }}</span>
+            </div>
+            <div class="controls focus-controls">
+              <button class="ctrl-btn mode-btn control-side control-side-left" :title="modeLabel" @click="cycleMode">{{ modeIcon }}</button>
+              <div class="transport-controls">
+                <button class="ctrl-btn" title="上一首" @click="emit('prev')">⏮</button>
+                <button class="ctrl-btn play-btn" :class="{ active: isPlaying }" @click="togglePlay">
+                  {{ isPlaying ? '⏸' : '▶' }}
+                </button>
+                <button class="ctrl-btn" title="下一首" @click="emit('next')">⏭</button>
+              </div>
+              <div class="volume-group control-side control-side-right">
+                <button class="ctrl-btn volume-icon" @click="toggleMute">
+                  {{ isMuted || volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊' }}
+                </button>
+                <input type="range" class="volume-slider" min="0" max="1" step="0.05"
+                       :value="volume" @input="changeVolume" />
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </Transition>
     </Teleport>
   </div>
 </template>
@@ -406,6 +408,28 @@ onUnmounted(() => {
   padding: 24px;
   background: rgba(5, 5, 12, 0.84);
   backdrop-filter: blur(10px);
+}
+
+.focus-player-motion-enter-active,
+.focus-player-motion-leave-active {
+  transition: opacity 0.24s ease, backdrop-filter 0.24s ease;
+}
+
+.focus-player-motion-enter-active .focus-shell,
+.focus-player-motion-leave-active .focus-shell {
+  transition: transform 0.24s ease, opacity 0.24s ease;
+}
+
+.focus-player-motion-enter-from,
+.focus-player-motion-leave-to {
+  opacity: 0;
+  backdrop-filter: blur(0);
+}
+
+.focus-player-motion-enter-from .focus-shell,
+.focus-player-motion-leave-to .focus-shell {
+  opacity: 0;
+  transform: translateY(16px) scale(0.97);
 }
 
 .focus-shell {
