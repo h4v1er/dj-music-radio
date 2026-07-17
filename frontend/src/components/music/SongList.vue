@@ -104,6 +104,12 @@ function toggleFavorite() {
   }
   hideContextMenu()
 }
+function playSongFromList(song) {
+  emit('play', song)
+}
+function favoriteFromList(song) {
+  emit('favorite', song)
+}
 
 // ── 拖拽 ──
 function onDragStart(e, index) {
@@ -156,7 +162,7 @@ onMounted(async () => {
            class="song-item"
            :class="{ active: currentSong?.id === song.id, 'drag-mode': dragMode }"
            :draggable="dragMode"
-           @click="emit('play', song)"
+           @click="playSongFromList(song)"
            @contextmenu="showContextMenu($event, song)"
            @dragstart="onDragStart($event, idx)"
            @drop="onDrop($event, idx)"
@@ -176,7 +182,7 @@ onMounted(async () => {
         <EmotionTag v-if="song.emotionTags" :emotion="song.emotionTags.split(',')[0]" size="sm" />
         <span class="song-duration">{{ fmtDuration(song.duration) }}</span>
         <button class="fav-btn" :class="{ faved: song._favorited }"
-                title="收藏" @click.stop="emit('favorite', song)">❤</button>
+                title="收藏" @click.stop="favoriteFromList(song)">❤</button>
       </div>
     </div>
 
@@ -186,7 +192,7 @@ onMounted(async () => {
       <div class="ctx-item" @click="addToQueue">加入播放队列</div>
       <div class="ctx-item" @click="addToPlaylist">添加到歌单</div>
       <div class="ctx-item" @click="toggleFavorite">❤ 收藏/取消收藏</div>
-      <div class="ctx-item" @click="emit('play', contextMenu.song); hideContextMenu()">▶ 播放</div>
+      <div class="ctx-item" @click="playSongFromList(contextMenu.song); hideContextMenu()">▶ 播放</div>
     </div>
   </div>
 </template>

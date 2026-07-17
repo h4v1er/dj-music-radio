@@ -28,6 +28,7 @@ const showEmotion = ref(false)
 const activeTab = ref('all')    // all | playlists | favorites | history
 const currentPlaylistId = ref(null)
 const dragMode = ref(false)
+const queueExpanded = ref(false)
 const addPlaylistVisible = ref(false)
 const addPlaylistSong = ref(null)
 const playlistOptions = ref([])
@@ -69,6 +70,11 @@ const tabLabel = computed(() => {
 
 // ── 播放逻辑 ──
 async function playSong(song) {
+  currentSong.value = song
+  if (!playQueue.value.find(s => s.id === song.id)) {
+    playQueue.value.push(song)
+  }
+
   // 网易云歌曲（导入歌单/搜索结果），无本地文件时需获取在线播放URL + 歌词
   if ((song.source === 'NETEASE' || song._netease) && !song.filePath) {
     try {
@@ -100,12 +106,12 @@ async function playSong(song) {
           }
         } catch (e) { /* ignore */ }
       }
+      currentSong.value = { ...song }
     } catch (e) {
       console.error('获取网易云播放URL失败', e)
     }
   }
 
-  currentSong.value = song
   // 记录播放历史
   api.recordPlay(song.id)
     .then(() => window.dispatchEvent(new CustomEvent('dj-user-library-changed', { detail: { type: 'history' } })))
@@ -113,10 +119,6 @@ async function playSong(song) {
   reportRecBehavior(song, 'play')
   // 检查收藏状态
   checkFavStatus(song)
-  // 如果没在队列中，加入队列
-  if (!playQueue.value.find(s => s.id === song.id)) {
-    playQueue.value.push(song)
-  }
 }
 
 async function playNext() {
@@ -149,6 +151,20 @@ function addToQueue(song) {
   if (!playQueue.value.find(s => s.id === song.id)) {
     playQueue.value.push(song)
   }
+  queueExpanded.value = true
+}
+
+function removeFromQueue(song) {
+  playQueue.value = playQueue.value.filter(item => item.id !== song.id)
+  if (currentSong.value?.id === song.id) {
+    currentSong.value = playQueue.value[0] || null
+  }
+  if (playQueue.value.length === 0) queueExpanded.value = false
+}
+
+function clearQueue() {
+  playQueue.value = currentSong.value ? [currentSong.value] : []
+  queueExpanded.value = false
 }
 
 function isLocalSong(song) {
@@ -304,6 +320,11 @@ async function searchNetease() {
 }
 
 async function playNeteaseSong(song) {
+  currentSong.value = song
+  if (!playQueue.value.find(s => s.id === song.id)) {
+    playQueue.value.push(song)
+  }
+
   try {
     // 并行获取播放URL、歌词、详情（补充封面）
     const [urlRes, lyricRes, detailRes] = await Promise.all([
@@ -331,9 +352,8 @@ async function playNeteaseSong(song) {
         song.coverUrl = picUrl.startsWith('http://') ? picUrl.replace('http://', 'https://') : picUrl
       }
     }
+    currentSong.value = { ...song }
   } catch (e) { console.error('获取播放数据失败', e) }
-  currentSong.value = song
-  playQueue.value.push(song)
 }
 
 async function playExternalSong(event) {
@@ -549,9 +569,26 @@ async function handleUserSessionChanged() {
               @favorite="toggleFavorite" @reorder="onReorder" />
 
     <!-- 播放队列 -->
-    <div v-if="playQueue.length > 0" class="queue-bar">
-      <span class="queue-label">📜 队列 ({{ playQueue.length }})</span>
-      <span class="queue-mode">模式: {{ { order: '顺序', shuffle: '随机', repeat: '单曲循环' }[playMode] }}</span>
+    <div v-if="playQueue.length > 0" class="queue-panel" :class="{ expanded: queueExpanded }">
+      <button class="queue-bar" @click="queueExpanded = !queueExpanded">
+        <span class="queue-label">播放队列 ({{ playQueue.length }})</span>
+        <span class="queue-mode">模式: {{ { order: '顺序', shuffle: '随机', repeat: '单曲循环' }[playMode] }}</span>
+        <span class="queue-toggle">{{ queueExpanded ? '收起' : '展开' }}</span>
+      </button>
+      <div v-if="queueExpanded" class="queue-list">
+        <button v-for="(song, index) in playQueue" :key="song.id || song.sourceId || index"
+                class="queue-item" :class="{ active: currentSong?.id === song.id }"
+                @click="playSong(song)">
+          <span class="queue-index">{{ index + 1 }}</span>
+          <span class="queue-copy">
+            <span class="queue-title">{{ song.title || '未知歌曲' }}</span>
+            <span class="queue-artist">{{ song.artist || '未知歌手' }}</span>
+          </span>
+          <span class="queue-playing">{{ currentSong?.id === song.id ? '播放中' : '' }}</span>
+          <span class="queue-remove" title="移出队列" @click.stop="removeFromQueue(song)">✕</span>
+        </button>
+        <button v-if="playQueue.length > 1" class="queue-clear" @click="clearQueue">只保留当前播放</button>
+      </div>
     </div>
 
     <!-- 导入对话框 -->
@@ -622,12 +659,84 @@ async function handleUserSessionChanged() {
 .tab.active { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
 
 /* 队列信息 */
-.queue-bar {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 6px 10px; border-radius: var(--radius-sm);
-  background: var(--color-bg); font-size: 11px; color: var(--color-text-muted);
+.queue-panel {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  overflow: hidden;
+  border: 1px solid transparent;
+  box-shadow: 0 -8px 18px rgba(0, 0, 0, 0.18);
 }
+.queue-panel.expanded { border-color: var(--color-border); }
+.queue-bar {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.queue-bar:hover { background: var(--color-surface-hover); color: var(--color-text); }
 .queue-mode { font-size: 10px; }
+.queue-toggle { color: var(--color-primary); font-size: 10px; }
+.queue-list {
+  max-height: 220px;
+  overflow-y: auto;
+  border-top: 1px solid var(--color-border);
+  padding: 4px;
+}
+.queue-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto 24px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  padding: 7px 8px;
+  cursor: pointer;
+  text-align: left;
+}
+.queue-item:hover { background: var(--color-surface-hover); }
+.queue-item.active { background: rgba(233, 69, 96, 0.12); }
+.queue-index { color: var(--color-text-muted); font-size: 11px; text-align: center; }
+.queue-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.queue-title { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queue-artist { font-size: 10px; color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queue-playing { color: var(--color-primary); font-size: 10px; white-space: nowrap; }
+.queue-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+}
+.queue-remove:hover { color: var(--color-primary); background: rgba(233, 69, 96, 0.12); }
+.queue-clear {
+  width: 100%;
+  margin-top: 3px;
+  padding: 7px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+.queue-clear:hover { border-color: var(--color-primary); color: var(--color-primary); }
 
 /* 网易云 */
 .netease-panel { }

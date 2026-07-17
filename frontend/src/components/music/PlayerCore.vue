@@ -24,6 +24,7 @@ const isMuted = ref(false)
 const prevVolume = ref(0.7)
 const coverError = ref(false)
 const coverLoaded = ref(false)
+const showFocusPlayer = ref(false)
 
 // ── 计算属性 ──
 const progressPercent = computed(() => {
@@ -54,6 +55,14 @@ const coverEmoji = computed(() => {
   const map = { '摇滚': '🎸', '电子': '🎹', '流行': '🎤', '民谣': '🪕', '爵士': '🎷' }
   return map[props.currentSong.genre] || '🎵'
 })
+
+function openFocusPlayer() {
+  if (props.currentSong) showFocusPlayer.value = true
+}
+
+function closeFocusPlayer() {
+  showFocusPlayer.value = false
+}
 
 // ── 音频事件 ──
 function onTimeUpdate() {
@@ -132,18 +141,20 @@ function formatTime(s) {
 }
 
 // ── 监听歌曲切换 ──
-watch(() => props.currentSong?.id, (newId, oldId) => {
+watch(() => [props.currentSong?.id, props.currentSong?.filePath], ([newId, filePath], [oldId, oldFilePath] = []) => {
   // 重置封面状态
-  coverError.value = false
-  coverLoaded.value = false
+  if (newId !== oldId) {
+    coverError.value = false
+    coverLoaded.value = false
+  }
   if (!props.currentSong || !audio.value) return
   // 同一首歌不重新加载
-  if (newId === oldId && isPlaying.value) return
-  if (props.currentSong.filePath) {
+  if (newId === oldId && filePath === oldFilePath && isPlaying.value) return
+  if (filePath) {
     // 先暂停当前播放
     audio.value.pause()
     // 设置新的音频源
-    audio.value.src = props.currentSong.filePath
+    audio.value.src = filePath
     isPlaying.value = false
     currentTime.value = 0
     // 直接播放（load 由浏览器自动处理）
@@ -180,13 +191,13 @@ onUnmounted(() => {
 <template>
   <div class="player-core">
     <!-- 专辑封面 -->
-    <div class="cover" :class="{ playing: isPlaying }">
+    <button class="cover" :class="{ playing: isPlaying }" :disabled="!currentSong" title="打开播放详情" @click="openFocusPlayer">
       <img v-if="coverUrl && !coverError" :src="coverUrl" class="cover-img"
            referrerpolicy="no-referrer"
            @load="coverLoaded = true"
            @error="coverError = true" />
       <span v-if="!coverUrl || coverError" class="cover-emoji">{{ coverEmoji }}</span>
-    </div>
+    </button>
 
     <!-- 歌曲信息 -->
     <div class="track-info">
@@ -223,11 +234,60 @@ onUnmounted(() => {
                :value="volume" @input="changeVolume" />
       </div>
     </div>
+
+    <Teleport to="body">
+      <div v-if="showFocusPlayer" class="focus-player" @click.self="closeFocusPlayer">
+        <div class="focus-shell">
+          <button class="focus-close" title="关闭播放详情" @click="closeFocusPlayer">✕</button>
+          <div class="focus-cover-wrap">
+            <img v-if="coverUrl && !coverError" :src="coverUrl" class="focus-cover"
+                 referrerpolicy="no-referrer" />
+            <span v-else class="focus-cover-fallback">{{ coverEmoji }}</span>
+          </div>
+          <div class="focus-info">
+            <div class="focus-title">{{ currentSong?.title || '未选择歌曲' }}</div>
+            <div class="focus-artist">{{ currentSong?.artist || '—' }}</div>
+            <div v-if="currentSong?.album" class="focus-album">{{ currentSong.album }}</div>
+          </div>
+          <div class="focus-progress">
+            <span class="time">{{ formattedCurrent }}</span>
+            <div class="progress-bar" @click="seekTo">
+              <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
+              <div class="progress-thumb" :style="{ left: progressPercent + '%' }"></div>
+            </div>
+            <span class="time">{{ formattedDuration }}</span>
+          </div>
+          <div class="controls focus-controls">
+            <button class="ctrl-btn mode-btn" :title="modeLabel" @click="cycleMode">{{ modeIcon }}</button>
+            <button class="ctrl-btn" title="上一首" @click="emit('prev')">⏮</button>
+            <button class="ctrl-btn play-btn" :class="{ active: isPlaying }" @click="togglePlay">
+              {{ isPlaying ? '⏸' : '▶' }}
+            </button>
+            <button class="ctrl-btn" title="下一首" @click="emit('next')">⏭</button>
+            <div class="volume-group">
+              <button class="ctrl-btn volume-icon" @click="toggleMute">
+                {{ isMuted || volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊' }}
+              </button>
+              <input type="range" class="volume-slider" min="0" max="1" step="0.05"
+                     :value="volume" @input="changeVolume" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
-.player-core { padding: 4px 0; }
+.player-core {
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 4px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
 
 /* 封面 */
 .cover {
@@ -236,7 +296,11 @@ onUnmounted(() => {
   display: flex; align-items: center; justify-content: center;
   margin: 0 auto; transition: transform 0.5s, box-shadow 0.5s; overflow: hidden;
   position: relative;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
 }
+.cover:disabled { cursor: default; }
 .cover.playing {
   animation: spin 8s linear infinite;
   box-shadow: 0 0 20px var(--color-primary-glow);
@@ -250,14 +314,15 @@ onUnmounted(() => {
 }
 
 /* 歌曲信息 */
-.track-info { text-align: center; margin-top: 10px; }
+.track-info { width: 100%; text-align: center; margin-top: 10px; }
 .track-name { font-size: 15px; font-weight: 600; }
 .track-artist { font-size: 12px; color: var(--color-text-muted); margin-top: 3px; }
 .track-album { font-size: 11px; color: var(--color-text-dim); margin-top: 2px; }
 
 /* 进度条 */
 .progress-section {
-  display: flex; align-items: center; gap: 8px; margin-top: 12px;
+  width: 100%;
+  display: flex; align-items: center; gap: 10px; margin-top: 12px;
 }
 .time { font-size: 11px; color: var(--color-text-muted); min-width: 36px; text-align: center; }
 .progress-bar {
@@ -277,6 +342,7 @@ onUnmounted(() => {
 
 /* 控制按钮 */
 .controls {
+  width: 100%;
   display: flex; align-items: center; justify-content: center;
   gap: 10px; margin-top: 12px; flex-wrap: wrap;
 }
@@ -306,4 +372,123 @@ onUnmounted(() => {
   -webkit-appearance: none; width: 12px; height: 12px;
   border-radius: 50%; background: var(--color-text); cursor: pointer;
 }
+
+/* 全屏播放详情 */
+.focus-player {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(5, 5, 12, 0.84);
+  backdrop-filter: blur(10px);
+}
+
+.focus-shell {
+  position: relative;
+  width: min(900px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  padding: 28px 36px 32px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-y: auto;
+}
+
+.focus-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.focus-close:hover { border-color: var(--color-primary); color: var(--color-text); }
+
+.focus-cover-wrap {
+  width: min(280px, 48vw);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: linear-gradient(135deg, #1a1a3e, #2a1a3e);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
+}
+
+.focus-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.focus-cover-fallback { font-size: 84px; }
+
+.focus-info {
+  width: 100%;
+  margin: 22px 0 18px;
+  text-align: center;
+}
+
+.focus-title {
+  max-width: 720px;
+  margin: 0 auto;
+  color: var(--color-text);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.focus-artist {
+  margin-top: 8px;
+  color: var(--color-text-muted);
+  font-size: 16px;
+}
+
+.focus-album {
+  margin-top: 6px;
+  color: var(--color-text-dim);
+  font-size: 13px;
+}
+
+.focus-progress {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.focus-controls {
+  margin-top: 24px;
+}
+
+.focus-controls .ctrl-btn {
+  width: 44px;
+  height: 44px;
+}
+
+.focus-controls .play-btn {
+  width: 62px;
+  height: 62px;
+  font-size: 22px;
+}
+
+.focus-controls .volume-icon {
+  width: 36px;
+  height: 36px;
+}
+
+.focus-controls .volume-slider { width: 110px; }
 </style>
