@@ -75,30 +75,33 @@ const chatExpanded = ref(false)
 
 /* ---- 主区域 ---- */
 .main-area {
-  flex: 1; display: grid;
-  grid-template-columns: 280px 1fr 300px;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 280px calc(100% - 280px - var(--gap-sm));
   gap: var(--gap-sm);
   padding: var(--gap-sm);
   overflow: hidden;
   min-height: 0;
-  transition: grid-template-columns 0.32s ease;
+  transition: grid-template-columns 0.68s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .side-panels {
-  display: contents;
-}
-
-.main-area.chat-expanded {
-  grid-template-columns: minmax(0, 1fr) 360px;
-}
-
-.main-area.chat-expanded .side-panels {
   display: grid;
-  grid-template-rows: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  grid-template-columns: minmax(0, 1fr) 300px;
   gap: var(--gap-sm);
   min-height: 0;
   overflow: hidden;
-  animation: sidePanelsSlideIn 0.28s ease both;
+  transition: grid-template-columns 0.52s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.main-area.chat-expanded {
+  grid-template-columns: calc(100% - 360px - var(--gap-sm)) 360px;
+}
+
+.main-area.chat-expanded .side-panels {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  animation: sidePanelsSlideIn 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .main-area.chat-expanded :deep(.music-panel),
@@ -111,7 +114,7 @@ const chatExpanded = ref(false)
 .main-area :deep(.chat-panel),
 .main-area :deep(.music-panel),
 .main-area :deep(.rec-panel) {
-  transition: transform 0.28s ease, opacity 0.28s ease, box-shadow 0.28s ease;
+  transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.42s ease, box-shadow 0.42s ease;
 }
 
 .main-area.chat-expanded :deep(.chat-panel) {
@@ -139,6 +142,7 @@ const chatExpanded = ref(false)
   .side-panels,
   .main-area.chat-expanded .side-panels {
     display: grid;
+    grid-template-columns: 1fr;
     gap: var(--gap-sm);
   }
 }

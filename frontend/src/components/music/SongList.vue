@@ -237,9 +237,9 @@ onMounted(async () => {
 }
 .song-item {
   display: grid;
-  grid-template-columns: 24px 36px minmax(0, 1fr) 70px 46px 28px;
+  grid-template-columns: 24px 36px minmax(0, 1fr) 52px 42px 24px;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 6px 8px; border-radius: var(--radius-sm); cursor: pointer;
   transition: background 0.15s; font-size: 12px;
 }
@@ -261,14 +261,14 @@ onMounted(async () => {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .song-emotion-cell {
-  width: 70px;
+  width: 52px;
   min-width: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: end;
 }
 .song-duration {
-  width: 46px;
+  width: 42px;
   font-size: 11px;
   color: var(--color-text-muted);
   text-align: right;
