@@ -7,8 +7,8 @@
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Connection, Headset, Promotion, User } from '@element-plus/icons-vue'
 import { chatApi } from '../api/chat'
+import { getCurrentUserId } from '../api/user'
 
-const USER_ID = 1
 const WEATHER_CITY_STORAGE_KEY = 'dj-weather-city'
 const WEATHER_LOCATION_STORAGE_KEY = 'dj-weather-location'
 const GEOLOCATION_TIMEOUT = 5000
@@ -22,22 +22,13 @@ let socket = null
 let replyTimer = null
 
 onMounted(async () => {
-  try {
-    await chatApi.hello()
-    connected.value = true
-    const res = await chatApi.history(USER_ID)
-    messages.value = normalizeMessages(res.data)
-    await scrollToBottom()
-  } catch (e) {
-    connected.value = false
-    messages.value = [
-      { role: 'dj', text: 'DJ 服务暂时连不上，请稍后再试。', time: '' }
-    ]
-  }
+  await loadHistory()
   connectSocket()
+  window.addEventListener('dj-user-session-changed', handleUserSessionChanged)
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('dj-user-session-changed', handleUserSessionChanged)
   clearReplyTimer()
   if (socket) {
     socket.close()
@@ -55,7 +46,7 @@ async function send() {
   await scrollToBottom()
 
   if (socket && socket.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify({ type: 'message', userId: USER_ID, content, context: currentChatContext() }))
+    socket.send(JSON.stringify({ type: 'message', userId: currentUserId(), content, context: currentChatContext() }))
     startReplyTimer()
     return
   }
@@ -65,7 +56,7 @@ async function send() {
 
 function connectSocket() {
   try {
-    socket = chatApi.createSocket(USER_ID)
+    socket = chatApi.createSocket(currentUserId())
     socket.onopen = () => {
       connected.value = true
     }
@@ -110,6 +101,30 @@ function connectSocket() {
   }
 }
 
+async function handleUserSessionChanged() {
+  if (socket) {
+    socket.close()
+    socket = null
+  }
+  await loadHistory()
+  connectSocket()
+}
+
+async function loadHistory() {
+  try {
+    await chatApi.hello()
+    connected.value = true
+    const res = await chatApi.history(currentUserId())
+    messages.value = normalizeMessages(res.data)
+    await scrollToBottom()
+  } catch (e) {
+    connected.value = false
+    messages.value = [
+      { role: 'dj', text: 'DJ 服务暂时连不上，请稍后再试。', time: '' }
+    ]
+  }
+}
+
 function pushRestReply(data) {
   const reply = data.reply
   const songs = data.songs || []
@@ -127,7 +142,7 @@ async function handleToolRequest(data) {
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({
         type: 'message',
-        userId: USER_ID,
+        userId: currentUserId(),
         content: data.content || input.value.trim(),
         context
       }))
@@ -209,10 +224,10 @@ function rememberLocation(location) {
 
 async function sendByRest(content, context) {
   try {
-    const res = await chatApi.send({ userId: USER_ID, content, context: context || currentChatContext() })
+    const res = await chatApi.send({ userId: currentUserId(), content, context: context || currentChatContext() })
     if (Array.isArray(res.data.clientToolRequests) && res.data.clientToolRequests.length) {
       const nextContext = await executeClientTools(res.data.clientToolRequests)
-      const nextRes = await chatApi.send({ userId: USER_ID, content, context: nextContext })
+      const nextRes = await chatApi.send({ userId: currentUserId(), content, context: nextContext })
       pushRestReply(nextRes.data)
       connected.value = true
       return
@@ -234,6 +249,10 @@ async function sendByRest(content, context) {
 
 function currentWeatherCity() {
   return localStorage.getItem(WEATHER_CITY_STORAGE_KEY) || ''
+}
+
+function currentUserId() {
+  return getCurrentUserId()
 }
 
 function startReplyTimer() {

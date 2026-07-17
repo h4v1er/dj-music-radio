@@ -355,11 +355,20 @@ onMounted(async () => {
   try { await api.hello(); connected.value = true } catch (e) { /* ignore */ }
   await loadSongs()
   window.addEventListener('dj-play-song', playExternalSong)
+  window.addEventListener('dj-user-session-changed', handleUserSessionChanged)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('dj-play-song', playExternalSong)
+  window.removeEventListener('dj-user-session-changed', handleUserSessionChanged)
 })
+
+async function handleUserSessionChanged() {
+  favoriteSongs.value = []
+  historySongs.value = []
+  if (activeTab.value === 'favorites') await loadFavorites()
+  if (activeTab.value === 'history') await loadHistory()
+}
 </script>
 
 <template>

@@ -1,5 +1,6 @@
 // ===== 队员B — 音乐服务 API =====
 import axios from 'axios'
+import { getCurrentUserId } from './user'
 
 // 音乐模块直连 8082（开发阶段 Vite 代理 /music → localhost:8082）
 const musicApi = axios.create({
@@ -8,6 +9,10 @@ const musicApi = axios.create({
 })
 
 export { musicApi }
+
+function resolveUserId(userId) {
+  return userId || getCurrentUserId()
+}
 
 export default {
   // ── 歌曲 ──
@@ -22,11 +27,11 @@ export default {
     musicApi.post(`/song/${id}/analyze-emotion`),
 
   // ── 歌单 ──
-  playlistList: (userId = 1) => musicApi.get('/playlist/list', { params: { userId } }),
+  playlistList: (userId) => musicApi.get('/playlist/list', { params: { userId: resolveUserId(userId) } }),
   playlistDetail: (id) => musicApi.get(`/playlist/${id}`),
   playlistSongs: (id) => musicApi.get(`/playlist/${id}/songs`),
-  createPlaylist: (name, description = '', userId = 1) =>
-    musicApi.post('/playlist', { name, description, userId }),
+  createPlaylist: (name, description = '', userId) =>
+    musicApi.post('/playlist', { name, description, userId: resolveUserId(userId) }),
   updatePlaylist: (id, name, description) =>
     musicApi.put(`/playlist/${id}`, { name, description }),
   deletePlaylist: (id) => musicApi.delete(`/playlist/${id}`),
@@ -36,22 +41,22 @@ export default {
     musicApi.delete(`/playlist/${playlistId}/song/${songId}`),
   sortPlaylist: (playlistId, songIds) =>
     musicApi.put(`/playlist/${playlistId}/sort`, { songIds }),
-  importPlaylist: (name, content, userId = 1) =>
-    musicApi.post('/playlist/import', { name, content, userId }),
+  importPlaylist: (name, content, userId) =>
+    musicApi.post('/playlist/import', { name, content, userId: resolveUserId(userId) }),
 
   // ── 收藏 ──
-  favoriteList: (userId = 1) => musicApi.get('/favorite/list', { params: { userId } }),
-  addFavorite: (songId, userId = 1) =>
-    musicApi.post(`/favorite/${songId}`, null, { params: { userId } }),
-  removeFavorite: (songId, userId = 1) =>
-    musicApi.delete(`/favorite/${songId}`, { params: { userId } }),
-  checkFavorite: (songId, userId = 1) =>
-    musicApi.get(`/favorite/check/${songId}`, { params: { userId } }),
+  favoriteList: (userId) => musicApi.get('/favorite/list', { params: { userId: resolveUserId(userId) } }),
+  addFavorite: (songId, userId) =>
+    musicApi.post(`/favorite/${songId}`, null, { params: { userId: resolveUserId(userId) } }),
+  removeFavorite: (songId, userId) =>
+    musicApi.delete(`/favorite/${songId}`, { params: { userId: resolveUserId(userId) } }),
+  checkFavorite: (songId, userId) =>
+    musicApi.get(`/favorite/check/${songId}`, { params: { userId: resolveUserId(userId) } }),
 
   // ── 播放历史 ──
-  historyList: (userId = 1) => musicApi.get('/history/list', { params: { userId } }),
-  recordPlay: (songId, userId = 1) =>
-    musicApi.post('/history', { songId, userId }),
+  historyList: (userId) => musicApi.get('/history/list', { params: { userId: resolveUserId(userId) } }),
+  recordPlay: (songId, userId) =>
+    musicApi.post('/history', { songId, userId: resolveUserId(userId) }),
 
   // ── 网易云音乐 ──
   neteaseSearch: (keywords, limit = 20) =>
@@ -70,8 +75,8 @@ export default {
   playlistEmotionOverview: (playlistId) => musicApi.get(`/emotion/playlist/${playlistId}/overview`),
 
   // ── 用户品味 ──
-  getUserTaste: (userId = 1) => musicApi.get(`/taste/${userId}`),
-  refreshTaste: (userId = 1) => musicApi.get(`/taste/refresh/${userId}`),
+  getUserTaste: (userId) => musicApi.get(`/taste/${resolveUserId(userId)}`),
+  refreshTaste: (userId) => musicApi.get(`/taste/refresh/${resolveUserId(userId)}`),
 
   // ── 健康检查 ──
   hello: () => musicApi.get('/hello')

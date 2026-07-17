@@ -26,3 +26,8 @@ mybatis-plus:
   global-config:
     db-config:
       id-type: auto
+
+user:
+  jwt:
+    secret: ${JWT_SECRET:dj_music_radio_user_secret_key_2026_min_32_chars}
+    expire-ms: ${JWT_EXPIRE_MS:86400000}

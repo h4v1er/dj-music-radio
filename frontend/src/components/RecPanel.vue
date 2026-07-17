@@ -4,11 +4,11 @@
  * 功能: 热门榜单 + 个性化推荐 + 偏好标签
  * 后端: module-rec (:8083)  Redis + RabbitMQ
  */
-import { ref, onMounted } from 'vue'
+import { ref, onBeforeUnmount, onMounted } from 'vue'
 import { recApi } from '../api/rec'
+import { getCurrentUserId } from '../api/user'
 
-// 临时使用默认用户ID，等队员D的用户模块做好后替换
-const userId = ref(1)
+const userId = ref(getCurrentUserId())
 const connected = ref(false)
 
 // 热门榜单
@@ -24,24 +24,39 @@ const tags = ref([])
 const tagsLoading = ref(true)
 
 onMounted(async () => {
-  // 检查后端连通性
+  await loadAll()
+  window.addEventListener('dj-user-session-changed', handleUserSessionChanged)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('dj-user-session-changed', handleUserSessionChanged)
+})
+
+async function handleUserSessionChanged() {
+  userId.value = getCurrentUserId()
+  await loadAll()
+}
+
+async function loadAll() {
+  hotLoading.value = true
+  dailyLoading.value = true
+  tagsLoading.value = true
+  tags.value = []
+
   try { await recApi.hello(); connected.value = true } catch (e) { connected.value = false }
 
-  // 加载热门榜单
   try {
     const res = await recApi.hot()
     hotSongs.value = res.data || []
   } catch (e) { /* 后端没启动时保持空列表 */ }
   hotLoading.value = false
 
-  // 加载今日推荐
   try {
     const res = await recApi.daily(userId.value)
     dailySongs.value = res.data || []
   } catch (e) { /* 后端没启动时保持空列表 */ }
   dailyLoading.value = false
 
-  // 加载偏好标签
   if (connected.value) {
     try {
       const res = await recApi.preferences(userId.value)
@@ -50,7 +65,7 @@ onMounted(async () => {
   }
   if (tags.value.length === 0) tags.value = ['摇滚', '电子', '流行']
   tagsLoading.value = false
-})
+}
 </script>
 
 <template>
