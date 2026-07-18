@@ -69,6 +69,7 @@ export default {
   neteaseSearch: (keywords, limit = 20) =>
     musicApi.get('/netease/search', { params: { keywords, limit } }),
   neteaseUrl: (id) => musicApi.get('/netease/url', { params: { id } }),
+  neteaseStreamUrl: (id) => `/music/netease/stream?id=${encodeURIComponent(id)}`,
   neteaseDetail: (ids) => musicApi.get('/netease/detail', { params: { ids } }),
   neteaseLyric: (id) => musicApi.get('/netease/lyric', { params: { id } }),
   neteasePing: () => musicApi.get('/netease/ping'),

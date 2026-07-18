@@ -91,7 +91,7 @@ async function playSong(song) {
       // 设置播放URL
       const urlData = urlRes.data?.data
       if (urlData && urlData.length > 0 && urlData[0].url) {
-        playableSong.filePath = urlData[0].url
+        playableSong.filePath = api.neteaseStreamUrl(neteaseId)
       }
       // 设置歌词
       const lyricData = lyricRes.data?.data
@@ -351,7 +351,7 @@ async function playNeteaseSong(song) {
     // 设置播放URL
     const urlData = urlRes.data?.data
     if (urlData && urlData.length > 0 && urlData[0].url) {
-      neteaseSong.filePath = urlData[0].url
+      neteaseSong.filePath = api.neteaseStreamUrl(neteaseSong.sourceId || neteaseSong.id)
     }
     // 设置歌词
     const lyricData = lyricRes.data?.data
@@ -573,6 +573,7 @@ function normalizeQueueSong(song) {
   if (!song) return null
   const netease = song._netease || song.source === 'NETEASE'
   const sourceId = song.sourceId || (netease ? song.id : '')
+  const filePath = resolvePlayableFilePath(song.filePath, netease, sourceId)
   return {
     ...song,
     id: song.id || song.songId || sourceId,
@@ -581,10 +582,18 @@ function normalizeQueueSong(song) {
     album: song.album || '',
     genre: song.genre || (netease ? '网易云' : ''),
     coverUrl: song.coverUrl || '',
-    filePath: song.filePath || '',
+    filePath,
     duration: normalizeDuration(song.duration),
     _netease: netease
   }
+}
+
+function resolvePlayableFilePath(filePath, netease, sourceId) {
+  if (!netease || !sourceId) return filePath || ''
+  if (!filePath || filePath.includes('music.126.net') || filePath.includes('music.163.com')) {
+    return api.neteaseStreamUrl(sourceId)
+  }
+  return filePath
 }
 
 function queueSongKey(song) {

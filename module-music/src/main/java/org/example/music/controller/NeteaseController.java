@@ -4,6 +4,7 @@ import org.example.music.dto.Result;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -62,6 +63,76 @@ public class NeteaseController {
             return Result.ok(resp != null ? resp.get("data") : null);
         } catch (Exception e) {
             return Result.fail("无法获取播放地址");
+        }
+    }
+
+    /**
+     * 代理网易云音频流。
+     *
+     * 前端直接播放网易云 CDN URL 时，不同浏览器/网络出口可能表现不一致。
+     * 通过后端代理后，浏览器只访问本项目服务，实际 CDN 拉取统一由远端服务完成。
+     */
+    @GetMapping("/stream")
+    public void stream(@RequestParam String id,
+                       HttpServletRequest request,
+                       HttpServletResponse response) {
+        HttpURLConnection conn = null;
+        try {
+            String audioUrl = resolvePlayableUrl(id);
+            if (audioUrl == null || audioUrl.isBlank()) {
+                response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                return;
+            }
+
+            conn = (HttpURLConnection) URI.create(audioUrl).toURL().openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(30000);
+            conn.setRequestProperty("Referer", "https://music.163.com/");
+            conn.setRequestProperty("User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+
+            String range = request.getHeader("Range");
+            if (range != null && !range.isBlank()) {
+                conn.setRequestProperty("Range", range);
+            }
+
+            int upstreamStatus = conn.getResponseCode();
+            if (upstreamStatus == HttpURLConnection.HTTP_PARTIAL) {
+                response.setStatus(HttpServletResponse.SC_PARTIAL_CONTENT);
+                String contentRange = conn.getHeaderField("Content-Range");
+                if (contentRange != null) {
+                    response.setHeader("Content-Range", contentRange);
+                }
+            } else if (upstreamStatus >= 400) {
+                response.setStatus(upstreamStatus);
+                return;
+            }
+
+            String contentType = conn.getContentType();
+            response.setContentType(contentType != null ? contentType : "audio/mpeg");
+            response.setHeader("Accept-Ranges", "bytes");
+            response.setHeader("Cache-Control", "no-store");
+
+            String contentLength = conn.getHeaderField("Content-Length");
+            if (contentLength != null) {
+                response.setHeader("Content-Length", contentLength);
+            }
+
+            try (InputStream in = conn.getInputStream();
+                 OutputStream out = response.getOutputStream()) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) != -1) {
+                    out.write(buf, 0, n);
+                }
+            }
+        } catch (Exception e) {
+            response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
         }
     }
 
@@ -213,5 +284,41 @@ public class NeteaseController {
         } catch (Exception e) {
             return Result.fail("网易云API不可用: " + e.getMessage());
         }
+    }
+
+    private String resolvePlayableUrl(String id) {
+        String[] levels = {"lossless", "exhigh", "higher", "standard"};
+        for (String level : levels) {
+            try {
+                String url = NETEASE_API + "/song/url/v1?id=" + id + "&level=" + level;
+                Map resp = rest.getForObject(url, Map.class);
+                String playableUrl = extractFirstUrl(resp);
+                if (playableUrl != null) {
+                    return playableUrl;
+                }
+            } catch (Exception e) {
+                // 该音质失败时继续降级尝试
+            }
+        }
+        try {
+            String url = NETEASE_API + "/song/url?id=" + id;
+            Map resp = rest.getForObject(url, Map.class);
+            return extractFirstUrl(resp);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String extractFirstUrl(Map resp) {
+        if (resp == null || resp.get("data") == null) {
+            return null;
+        }
+        List<Map> data = (List<Map>) resp.get("data");
+        if (data == null || data.isEmpty()) {
+            return null;
+        }
+        Object urlObj = data.get(0).get("url");
+        String url = urlObj != null ? urlObj.toString() : "";
+        return url.isBlank() ? null : url;
     }
 }
